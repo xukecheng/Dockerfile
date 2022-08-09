@@ -26,7 +26,8 @@ jobs:
     - name: Set env triggered
       id: check
       run: |
-        if [[ steps.filter.outputs.caddy == true || steps.filter.outputs.realm == true ]]; then
+        echo '${{ steps.filter.outputs.caddy }}'
+        if [[ steps.filter.outputs.caddy == 'true' || steps.filter.outputs.realm == 'true' ]]; then
             echo '::set-output name=triggered::true'
         else
             echo '::set-output name=triggered::false'
@@ -34,9 +35,9 @@ jobs:
     - name: Set env image_name
       id: image
       run: |
-        if [[ steps.filter.outputs.caddy == true ]]; then
+        if [[ steps.filter.outputs.caddy == 'true' ]]; then
             echo '::set-output name=image_name::caddy'
-        elif [[ steps.filter.outputs.realm == true ]]; then
+        elif [[ steps.filter.outputs.realm == 'true' ]]; then
             echo '::set-output name=image_name::realm'
         fi
     - name: Get variable
