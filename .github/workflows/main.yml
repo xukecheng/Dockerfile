@@ -11,7 +11,7 @@ jobs:
   paths-filter:
     runs-on: ubuntu-latest
     outputs:
-      need: ${{ steps.set_need.outputs.need }}
+      deploy-status: ${{ steps.check.outputs.triggered }}
       image_name: ${{ steps.image.outputs.image_name }}
     steps:
     - uses: actions/checkout@v2
@@ -23,13 +23,14 @@ jobs:
             - 'Dockerfile.caddy'
           realm:
             - 'Dockerfile.realm'
-    - name: Set env need
-      id: set_need
+    - name: Set env triggered
+      id: check
       run: |
         if [[ steps.filter.outputs.caddy == 'true' || steps.filter.outputs.realm == 'true' ]]; then
-            echo '::set-output name=need::true'
+            echo '::set-output name=triggered::true'
+            
         else
-            echo '::set-output name=need::false'
+            echo '::set-output name=triggered::false'
         fi
     - name: Set env image_name
       id: image
@@ -39,6 +40,8 @@ jobs:
         elif [[ steps.filter.outputs.realm == 'true' ]]; then
             echo '::set-output name=image_name::realm'
         fi
+    - name: Get variable
+      run: echo "The deploy status is ${{ steps.check.outputs.triggered }}, The image name is ${{ steps.image.outputs.image_name }}"
 
 
   build-caddy:
@@ -48,7 +51,7 @@ jobs:
     permissions:
       packages: write
       contents: read
-    if: needs.paths-filter.outputs.need == true
+    if: needs.paths-filter.outputs.deploy-status == 'true'
     env:
       IMAGE_NAME: ${{ needs.paths-filter.outputs.image_name }}
     steps:
