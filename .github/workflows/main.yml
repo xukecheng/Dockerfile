@@ -48,7 +48,7 @@ jobs:
     permissions:
       packages: write
       contents: read
-    if: needs.paths-filter.outputs.need == 'true'
+    if: needs.paths-filter.outputs.need == true
     env:
       IMAGE_NAME: ${{ needs.paths-filter.outputs.image_name }}
     steps:
