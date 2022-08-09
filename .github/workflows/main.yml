@@ -11,30 +11,32 @@ jobs:
   paths-filter:
     runs-on: ubuntu-latest
     outputs:
-      output1: ${{ steps.filter.outputs.workflows }}
+      need: ${{ steps.filter.outputs.need }}
+      image_name: ${{ steps.image.outputs.image_name }}
     steps:
     - uses: actions/checkout@v2
     - uses: dorny/paths-filter@v2
-      id: changes
+      id: filter
       with:
         filters: |
           caddy:
             - 'Dockerfile.caddy'
           realm:
             - 'Dockerfile.realm'
-    - name: Set env NEED
+    - name: Set env need
       run: |
         if [[ steps.filter.outputs.caddy == 'true' || steps.filter.outputs.realm == 'true' ]]; then
-            echo "NEED=true" >> "$GITHUB_ENV"
+            echo '::set-output name=need::true'
         else
-            echo "NEED=false" >> "$GITHUB_ENV"
+            echo '::set-output name=need::false'
         fi
-    - name: Set env IMAGE_NAME
+    - name: Set env image_name
+      id: image
       run: |
         if [[ steps.filter.outputs.caddy == 'true' ]]; then
-            echo "IMAGE_NAME=caddy" >> "$GITHUB_ENV"
+            echo '::set-output name=image_name::caddy'
         elif [[ steps.filter.outputs.realm == 'true' ]]; then
-            echo "IMAGE_NAME=realm" >> "$GITHUB_ENV"
+            echo '::set-output name=image_name::realm'
         fi
 
 
@@ -45,12 +47,14 @@ jobs:
     permissions:
       packages: write
       contents: read
-    if: env.NEED == 'true'
+    if: needs.paths-filter.outputs.need == 'true'
+    env:
+      IMAGE_NAME: ${{ needs.paths-filter.outputs.image_name }}
     steps:
       - uses: actions/checkout@v3
 
       - name: Build image
-        run: docker build . --file Dockerfile.caddy --tag ENV.IMAGE_NAME --label "runnumber=${GITHUB_RUN_ID}"
+        run: docker build . --file Dockerfile.caddy --tag $IMAGE_NAME --label "runnumber=${GITHUB_RUN_ID}"
 
       - name: Log in to registry
         # This is where you will update the PAT to GITHUB_TOKEN
@@ -58,7 +62,7 @@ jobs:
 
       - name: Push image
         run: |
-          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/ENV.IMAGE_NAME
+          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
 
           # Change all uppercase to lowercase
           IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
@@ -70,6 +74,6 @@ jobs:
           [ "$VERSION" == "main" ] && VERSION=latest
           echo IMAGE_ID=$IMAGE_ID
           echo VERSION=$VERSION
-          docker tag ENV.IMAGE_NAME $IMAGE_ID:$VERSION
+          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
