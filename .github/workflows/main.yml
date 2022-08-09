@@ -44,7 +44,7 @@ jobs:
   build-caddy:
     runs-on: ubuntu-latest
     # Wait from the paths-filter to be completed before starting next-job
-    needs: paths-filter
+    needs: [paths-filter]
     permissions:
       packages: write
       contents: read
