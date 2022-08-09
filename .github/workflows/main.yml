@@ -11,7 +11,7 @@ jobs:
   paths-filter:
     runs-on: ubuntu-latest
     outputs:
-      need: ${{ steps.filter.outputs.need }}
+      need: ${{ steps.set_need.outputs.need }}
       image_name: ${{ steps.image.outputs.image_name }}
     steps:
     - uses: actions/checkout@v2
@@ -24,6 +24,7 @@ jobs:
           realm:
             - 'Dockerfile.realm'
     - name: Set env need
+      id: set_need
       run: |
         if [[ steps.filter.outputs.caddy == 'true' || steps.filter.outputs.realm == 'true' ]]; then
             echo '::set-output name=need::true'
