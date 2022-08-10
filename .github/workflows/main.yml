@@ -50,7 +50,7 @@ jobs:
     permissions:
       packages: write
       contents: read
-    if: needs.paths-filter.outputs.deploy-status
+    if: needs.paths-filter.outputs.deploy-status == 'true'
     env:
       IMAGE_NAME: ${{ needs.paths-filter.outputs.image_name }}
     steps:
