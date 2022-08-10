@@ -43,7 +43,7 @@ jobs:
       run: echo "The deploy status is ${{ steps.check.outputs.triggered }}, The image name is ${{ steps.image.outputs.image_name }}"
 
 
-  build-caddy:
+  build:
     runs-on: ubuntu-latest
     # Wait from the paths-filter to be completed before starting next-job
     needs: [paths-filter]
