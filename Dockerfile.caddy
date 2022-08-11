@@ -1,8 +1,0 @@
-FROM caddy:2.5.0-rc.1-builder-alpine AS builder
-
-RUN xcaddy build \
-    --with github.com/sjtug/caddy2-filter 
-
-FROM caddy:2.5.0-rc.1-alpine
-
-COPY --from=builder /usr/bin/caddy /usr/bin/caddy
