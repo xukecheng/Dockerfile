@@ -1,15 +1,15 @@
-name: Build Realm Image
+name: Build Frp Image
 
 on:
   push:
     paths:
-      - "realm/**"
+      - "frp/**"
   workflow_dispatch:
 
 defaults:
   run:
     shell: bash
-    working-directory: realm
+    working-directory: frp
 
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
       packages: write
       contents: read
     env:
-      IMAGE_NAME: realm
+      IMAGE_NAME: frp
     steps:
       - uses: actions/checkout@v3
 
