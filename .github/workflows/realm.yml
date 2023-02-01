@@ -1,9 +1,9 @@
-name: Image Build
+name: Build Realm Image
 
-on:   
+on:
   push:
-    branches:
-      - main
+    paths:
+      - "realm/**"
   workflow_dispatch:
 
 jobs:
