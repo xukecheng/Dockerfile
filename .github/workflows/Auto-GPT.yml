@@ -1,15 +1,15 @@
-name: Build Realm Image
+name: Build Auto-GPT Image
 
 on:
   push:
     paths:
-      - "get_feishu_changelog/**"
+      - "Auto-GPT/**"
   workflow_dispatch:
 
 defaults:
   run:
     shell: bash
-    working-directory: get_feishu_changelog
+    working-directory: Auto-GPT
 
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
       packages: write
       contents: read
     env:
-      IMAGE_NAME: get_feishu_changelog
+      IMAGE_NAME: auto_gpt
     steps:
       - uses: actions/checkout@v3
 
