@@ -37,13 +37,16 @@ jobs:
   next:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          mkdir -p .AgentGPT
+      - uses: actions/checkout@v3
+
+      - run: mkdir -p .AgentGPT
 
       - uses: actions/checkout@v3
         with:
           repository: xukecheng/AgentGPT
           path: .AgentGPT
+
+      - run: cp AgentGPT/next/Dockerfile .AgentGPT/next/Dockerfile
 
       - name: Log in to registry
         # This is where you will update the PAT to GITHUB_TOKEN
@@ -58,3 +61,10 @@ jobs:
           context: .AgentGPT/next
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/agentgpt_next:latest
+          build-args: |
+            DATABASE_URL=${{ secrets.AGENTGPT_DATABASE_URL }}
+            NEXTAUTH_URL=${{ secrets.AGENTGPT_NEXTAUTH_URL }}
+            NEXTAUTH_SECRET=${{ secrets.AGENTGPT_NEXTAUTH_SECRET }}
+            NEXT_PUBLIC_BACKEND_URL=${{ secrets.AGENTGPT_NEXT_PUBLIC_BACKEND_URL }}
+            GITHUB_CLIENT_ID=${{ secrets.AGENTGPT_GITHUB_CLIENT_ID }}
+            GITHUB_CLIENT_SECRET=${{ secrets.AGENTGPT_GITHUB_CLIENT_SECRET }}
