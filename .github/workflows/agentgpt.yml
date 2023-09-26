@@ -33,3 +33,28 @@ jobs:
           push: true
           target: prod
           tags: ghcr.io/${{ github.repository_owner }}/agentgpt_platform:latest
+
+  next:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          mkdir -p .AgentGPT
+
+      - uses: actions/checkout@v3
+        with:
+          repository: xukecheng/AgentGPT
+          path: .AgentGPT
+
+      - name: Log in to registry
+        # This is where you will update the PAT to GITHUB_TOKEN
+        run: echo "${{ secrets.PERSONAL_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build platform and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .AgentGPT/next
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/agentgpt_next:latest
