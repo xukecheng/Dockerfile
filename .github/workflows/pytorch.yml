@@ -31,7 +31,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./Pytorch
+          file: ./Pytorch/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/pytorch:latest
           build-args: |
