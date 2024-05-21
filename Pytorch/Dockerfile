@@ -1,6 +1,10 @@
 # 使用 PyTorch 官方镜像
 FROM pytorch/pytorch
 
+# 设置环境变量以避免 tzdata 的交互提示
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
+
 # 安装必要的系统依赖和 Python 3.12
 RUN apt-get update && apt-get install -y \
     software-properties-common \
