@@ -19,9 +19,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建 Python 3.12 的软链接
-RUN ln -s /usr/bin/python3.12 /usr/bin/python3 && \
-    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-
+RUN ln -s /usr/bin/python3.12 /usr/bin/python3
 # 安装 pip
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 
