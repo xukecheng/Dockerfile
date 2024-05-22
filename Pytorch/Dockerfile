@@ -11,10 +11,11 @@ RUN apt-get update && apt-get install -y \
     openssh-server \
     sudo \
     vim \
+    git \
+    git-lfs \
+    curl \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y \
-    git \
-    curl \
     python3.12 \
     python3.12-dev \
     python3.12-distutils \
@@ -25,6 +26,18 @@ RUN rm /usr/bin/python3 && ln -s /usr/bin/python3.12 /usr/bin/python3
 
 # 安装 pip
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+
+# 安装 pip 包
+RUN pip install --no-cache-dir \
+    transformers \
+    pandas \
+    scikit-learn \
+    torch \
+    accelerate \
+    imbalanced-learn \
+    wandb \
+    ipykernel \
+    jupyter
 
 # 安装并配置 SSH
 RUN mkdir /var/run/sshd
