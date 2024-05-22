@@ -27,8 +27,9 @@ RUN rm /usr/bin/python3 && ln -s /usr/bin/python3.12 /usr/bin/python3
 # 安装 pip
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 
-# 安装 pip 包
-RUN pip install --no-cache-dir \
+# 安装 pip 包并添加调试信息
+RUN python3.12 -m pip install --no-cache-dir -U pip \
+    && pip install --no-cache-dir \
     transformers \
     pandas \
     scikit-learn \
@@ -37,7 +38,9 @@ RUN pip install --no-cache-dir \
     imbalanced-learn \
     wandb \
     ipykernel \
-    jupyter
+    jupyter \
+    && echo "Installed packages:" \
+    && pip list
 
 # 安装并配置 SSH
 RUN mkdir /var/run/sshd
