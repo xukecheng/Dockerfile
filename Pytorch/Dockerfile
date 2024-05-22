@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     vim \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y \
+    git \
+    curl \
     python3.12 \
     python3.12-dev \
     python3.12-distutils \
