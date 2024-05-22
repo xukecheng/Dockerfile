@@ -29,7 +29,7 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 
 # 安装 pip 包并添加调试信息
 RUN python3.12 -m pip install --no-cache-dir -U pip \
-    && pip install --no-cache-dir \
+    && python3.12 -m pip install --no-cache-dir \
     transformers \
     pandas \
     scikit-learn \
@@ -40,7 +40,7 @@ RUN python3.12 -m pip install --no-cache-dir -U pip \
     ipykernel \
     jupyter \
     && echo "Installed packages:" \
-    && pip list
+    && python3.12 -m pip list
 
 # 安装并配置 SSH
 RUN mkdir /var/run/sshd
