@@ -5,7 +5,7 @@ FROM debian:stable
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Shanghai
 
-# 安装必要的系统依赖和 Python 3.12
+# 安装必要的系统依赖
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     openssh-server \
@@ -14,18 +14,32 @@ RUN apt-get update && apt-get install -y \
     git \
     git-lfs \
     curl \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-dev \
-    python3.12-distutils \
+    wget \
+    build-essential \
+    libssl-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    llvm \
+    libncurses5-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libffi-dev \
+    liblzma-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建 Python 3.12 的软链接
-RUN ln -s /usr/bin/python3.12 /usr/bin/python3
-
-# 安装 pip
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+# 安装 Python 3.12
+RUN wget https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz \
+    && tar -xzf Python-3.12.0.tgz \
+    && cd Python-3.12.0 \
+    && ./configure --enable-optimizations \
+    && make altinstall \
+    && ln -s /usr/local/bin/python3.12 /usr/bin/python3 \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
+    && cd .. \
+    && rm -rf Python-3.12.0 Python-3.12.0.tgz
 
 # 安装 pip 包并添加调试信息
 RUN python3.12 -m pip install --no-cache-dir -U pip \
