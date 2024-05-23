@@ -36,7 +36,7 @@ RUN wget https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz \
     && cd Python-3.12.0 \
     && ./configure --enable-optimizations \
     && make altinstall \
-    && ln -s /usr/local/bin/python3.12 /usr/bin/python3 \
+    && ln -sf /usr/local/bin/python3.12 /usr/bin/python3 \
     && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
     && cd .. \
     && rm -rf Python-3.12.0 Python-3.12.0.tgz
@@ -55,6 +55,22 @@ RUN python3.12 -m pip install --no-cache-dir -U pip \
     jupyter \
     && echo "Installed packages:" \
     && python3.12 -m pip list
+
+# 安装并配置 SSH
+RUN mkdir /var/run/sshd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config \
+    && sed -i 's/ChallengeResponseAuthentication yes/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+
+# 设置公钥认证
+RUN mkdir -p /root/.ssh
+ARG SSH_PUBLIC_KEY
+RUN echo "$SSH_PUBLIC_KEY" > /root/.ssh/authorized_keys \
+    && chmod 600 /root/.ssh/authorized_keys \
+    && chown -R root:root /root/.ssh
+
+# 暴露 SSH 端口
+EXPOSE 22
 
 # 启动 SSH 服务
 CMD ["/usr/sbin/sshd", "-D"]
