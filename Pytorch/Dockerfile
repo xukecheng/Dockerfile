@@ -1,5 +1,5 @@
-# 使用 Python 3.12.3 作为基础镜像
-FROM python:3.12.3
+# 使用 Python 3.11.2 作为基础镜像
+FROM python:3.11.2
 
 # 设置环境变量以避免 tzdata 的交互提示
 ENV DEBIAN_FRONTEND=noninteractive
@@ -22,9 +22,13 @@ RUN pip install --no-cache-dir -U pip \
     transformers \
     pandas \
     scikit-learn \
-    torch \
+    torch==2.2.0 \
+    coremltools \
     accelerate \
     imbalanced-learn \
+    scikit-learn \
+    accelerate \
+    imblearn \
     wandb \
     ipykernel \
     jupyter \
