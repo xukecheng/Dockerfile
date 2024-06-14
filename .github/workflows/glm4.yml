@@ -1,0 +1,39 @@
+name: Build GLM4 Image
+
+on:
+  push:
+    paths:
+      - "GLM4/**"
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+    working-directory: GLM4
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.PERSONAL_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./GLM4
+          file: ./GLM4/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/glm4:latest
+          build-args: |
+            SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
