@@ -4,6 +4,5 @@ openai>=1.31.1
 bitsandbytes>=0.43.1
 einops>=0.7.0
 sse-starlette>=2.1.0
-
-# torch>=2.3.0
-# transformers==4.40.0
+torch>=2.3.0
+transformers==4.40.0
