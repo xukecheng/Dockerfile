@@ -32,6 +32,8 @@ RUN pip install --no-cache-dir -U pip \
     wandb \
     ipykernel \
     jupyter \
+    gunicorn==22.0.0 \
+    git+https://github.com/HumanSignal/label-studio-ml-backend.git \
     && echo "Installed packages:" \
     && pip list
 
