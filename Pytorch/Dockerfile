@@ -19,15 +19,15 @@ RUN apt-get update && apt-get install -y \
 # 安装 pip 包并添加调试信息
 RUN pip install --no-cache-dir -U pip \
     && pip install --no-cache-dir \
-    transformers \
+    transformers==4.38.0 \
     pandas \
     scikit-learn \
     torch==2.2.0 \
     coremltools \
-    accelerate \
+    numpy==1.26.4 \
+    accelerate==0.28.0 \
     imbalanced-learn \
     scikit-learn \
-    accelerate \
     imblearn \
     wandb \
     ipykernel \
