@@ -35,5 +35,7 @@ jobs:
           file: ./Pytorch/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/pytorch:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
