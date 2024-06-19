@@ -27,6 +27,7 @@ RUN pip install --no-cache-dir -U pip \
     numpy==1.26.4 \
     accelerate==0.28.0 \
     imbalanced-learn \
+    datasets==2.18.0 \
     scikit-learn \
     imblearn \
     wandb \
