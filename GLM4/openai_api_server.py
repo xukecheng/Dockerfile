@@ -12,6 +12,7 @@ import uvicorn
 import gc
 import json
 import torch
+import os
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
