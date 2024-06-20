@@ -479,8 +479,8 @@ async def predict_stream(model_id, gen_params):
         ##TODO 如果你希望做更多处理，可以在这里进行逻辑完善。
 
         if not is_function_call and len(lines) >= 2:
-            first_line = lines[0].strip()
-            if first_line in tools:
+            first_line = lines[0].strip() if lines[0] else None
+            if first_line and first_line in tools:
                 is_function_call = True
                 function_name = first_line
 
