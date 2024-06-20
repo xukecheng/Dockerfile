@@ -21,7 +21,7 @@ EventSourceResponse.DEFAULT_PING_INTERVAL = 1000
 import os
 
 MODEL_PATH = os.environ.get("MODEL_PATH", "THUDM/glm-4-9b-chat")
-MAX_MODEL_LENGTH = 8192
+MAX_MODEL_LENGTH = os.environ.get("MAX_MODEL_LENGTH", 8192)
 
 
 @asynccontextmanager

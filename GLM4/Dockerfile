@@ -8,5 +8,6 @@ RUN pip install -r requirements.txt
 
 ENV MODEL_PATH THUDM/glm-4-9b-chat
 ENV HF_HOME /models
+ENV MAX_MODEL_LENGTH 8192
 
 CMD ["python", "/app/openai_api_server.py"]
