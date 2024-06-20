@@ -157,7 +157,7 @@ def process_response(
     lines = output.strip().split("\n")
     arguments_json = None
     special_tools = ["cogview", "simple_browser"]
-    tools = {tool["function"]["name"] for tool in tools}
+    tools = {tool["function"]["name"] for tool in tools} if tools else {}
 
     # 这是一个简单的工具比较函数，不能保证拦截所有非工具输出的结果，比如参数未对齐等特殊情况。
     ##TODO 如果你希望做更多判断，可以在这里进行逻辑完善。
@@ -466,7 +466,7 @@ async def predict_stream(model_id, gen_params):
     tools = (
         {tool["function"]["name"] for tool in gen_params["tools"]}
         if gen_params["tools"]
-        else None
+        else {}
     )
     async for new_response in generate_stream_glm4(gen_params):
         decoded_unicode = new_response["text"]
