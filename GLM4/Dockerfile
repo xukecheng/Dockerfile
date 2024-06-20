@@ -4,9 +4,9 @@ WORKDIR /app
 ADD ./openai_api_server.py openai_api_server.py
 ADD ./requirements.txt requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
-ENV PORT 8000
 ENV MODEL_PATH THUDM/glm-4-9b-chat
+ENV HF_HOME /models
 
 CMD ["python", "/app/openai_api_server.py"]
