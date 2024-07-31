@@ -36,8 +36,6 @@ jobs:
           file: ./Perplexica/backend.dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/perplexica-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             SEARXNG_API_URL: ${{ secrets.SEARXNG_API_URL }}
 
@@ -48,8 +46,6 @@ jobs:
           file: ./Perplexica/app.dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/perplexica-app:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             NEXT_PUBLIC_WS_URL: ${{ secrets.NEXT_PUBLIC_WS_URL }}
             NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
