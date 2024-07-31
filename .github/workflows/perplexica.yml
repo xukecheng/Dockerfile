@@ -20,6 +20,7 @@ jobs:
         run: |
           cp Perplexica/sample.config.toml Perplexica/config.toml
           sed -i 's|OLLAMA = ".*"|OLLAMA = "${{ secrets.OLLAMA_API_URL }}"|' Perplexica/config.toml
+          sed -i 's|SEARXNG = ".*"|SEARXNG = "${{ secrets.SEARXNG_API_URL }}"|' Perplexica/config.toml
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
