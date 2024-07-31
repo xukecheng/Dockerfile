@@ -16,11 +16,11 @@ jobs:
       # sed -i 's/OPENAI = ".*"/OPENAI = "${{ secrets.OPENAI_API_KEY }}"/g' Perplexica/config.toml
       # sed -i 's/GROQ = ".*"/GROQ = "${{ secrets.GROQ_API_KEY }}"/g' Perplexica/config.toml
       # sed -i 's/ANTHROPIC = ".*"/ANTHROPIC = "${{ secrets.ANTHROPIC_API_KEY }}"/g' Perplexica/config.toml
+      # sed -i 's|OLLAMA = ".*"|OLLAMA = "${{ secrets.OLLAMA_API_URL }}"|' Perplexica/config.toml
       - name: Copy and modify config.toml
         run: |
           cp Perplexica/sample.config.toml Perplexica/config.toml
           sed -i 's|OLLAMA = ".*"|OLLAMA = "${{ secrets.OLLAMA_API_URL }}"|' Perplexica/config.toml
-          sed -i 's|SEARXNG = ".*"|SEARXNG = "${{ secrets.SEARXNG_API_URL }}"|' Perplexica/config.toml
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -37,6 +37,8 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/perplexica-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            SEARXNG_API_URL: ${{ secrets.SEARXNG_API_URL }}
 
       - name: Build and push app image
         uses: docker/build-push-action@v5
