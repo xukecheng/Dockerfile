@@ -12,6 +12,7 @@ jobs:
         with:
           repository: "ItzCrazyKns/Perplexica"
           path: "Perplexica"
+          ref: "v1.8.1"
 
       # sed -i 's/OPENAI = ".*"/OPENAI = "${{ secrets.OPENAI_API_KEY }}"/g' Perplexica/config.toml
       # sed -i 's/GROQ = ".*"/GROQ = "${{ secrets.GROQ_API_KEY }}"/g' Perplexica/config.toml
