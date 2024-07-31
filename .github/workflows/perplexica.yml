@@ -1,0 +1,46 @@
+name: Build Perplexica Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-push-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download Dockerfiles
+        run: |
+          curl -o backend.dockerfile https://raw.githubusercontent.com/ItzCrazyKns/Perplexica/master/backend.dockerfile
+          curl -o app.dockerfile https://raw.githubusercontent.com/ItzCrazyKns/Perplexica/master/app.dockerfile
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.PERSONAL_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend.dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/perplexica-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./app.dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/perplexica-app:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
