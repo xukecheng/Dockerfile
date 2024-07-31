@@ -37,8 +37,6 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/perplexica-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
 
       - name: Build and push app image
         uses: docker/build-push-action@v5
@@ -50,4 +48,5 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+            NEXT_PUBLIC_WS_URL: ${{ secrets.NEXT_PUBLIC_WS_URL }}
+            NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
