@@ -1,0 +1,39 @@
+name: Build Gemini Search Image
+
+on:
+  push:
+    paths:
+      - "Gemini-Search/**"
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+    working-directory: Gemini-Search
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.PERSONAL_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Gemini-Search
+          file: ./Gemini-Search/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/gemini-search:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
