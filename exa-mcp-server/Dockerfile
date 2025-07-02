@@ -1,5 +1,5 @@
 # Use the official Node.js 18 image as a parent image
-FROM node:18-alpine
+FROM node:18-alpine AS builder
 
 # Install git and perl to clone the repository and process files
 RUN apk add --no-cache git perl
@@ -35,9 +35,8 @@ RUN sed -i 's/"crawling_exa"/"fetch"/g' src/tools/crawling.ts && \
     sed -i '/maxCharacters: z\.number()\.optional()\.describe/d' src/tools/crawling.ts && \
     sed -i 's/{ url, maxCharacters }/{ id }/g' src/tools/crawling.ts && \
     sed -i 's/{ id, maxCharacters }/{ id }/g' src/tools/crawling.ts && \
-    sed -i 's/ids: \\[url\\]/ids: [id]/g' src/tools/crawling.ts && \
     sed -i 's/logger.start(url);/logger.start(id);/g' src/tools/crawling.ts && \
-    perl -i -pe 'BEGIN{undef $/;} s/contents: \\{[^}]*text: \\{[^}]*\\}[^}]*\\}/text: true/smg' src/tools/crawling.ts
+    perl -i -pe 'BEGIN{undef $/;} s/const crawlRequest = \{[^}]*ids: \[[^]]*\],[^}]*contents: \{[^}]*text: \{[^}]*\}[^}]*\}[^}]*\};/const crawlRequest = { ids: [id], text: true };/smg' src/tools/crawling.ts
 
 # Update src/types.ts to match simplified interfaces
 RUN sed -i 's/numResults: number;/query: string;/' src/types.ts && \
@@ -56,6 +55,18 @@ RUN npm ci --ignore-scripts
 
 # Build the project for Docker
 RUN npm run build
+
+# Use a minimal node image as the base image for running
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+# Copy compiled code from the builder stage
+COPY --from=builder /app/.smithery ./.smithery
+COPY --from=builder /app/package.json /app/package-lock.json ./
+
+# Install only production dependencies
+RUN npm ci --production --ignore-scripts
 
 # Set environment variable for the Exa API key
 ENV EXA_API_KEY=your-api-key-here
