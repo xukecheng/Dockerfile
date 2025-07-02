@@ -1,8 +1,8 @@
 # Use the official Node.js 18 image as a parent image
 FROM node:18-alpine AS builder
 
-# Install git to clone the repository
-RUN apk add --no-cache git
+# Install git and perl to clone the repository and process files
+RUN apk add --no-cache git perl
 
 # Set the working directory in the container to /app
 WORKDIR /app
