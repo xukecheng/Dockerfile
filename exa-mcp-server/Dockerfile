@@ -35,8 +35,9 @@ RUN sed -i 's/"crawling_exa"/"fetch"/g' src/tools/crawling.ts && \
     sed -i '/maxCharacters: z\.number()\.optional()\.describe/d' src/tools/crawling.ts && \
     sed -i 's/{ url, maxCharacters }/{ id }/g' src/tools/crawling.ts && \
     sed -i 's/{ id, maxCharacters }/{ id }/g' src/tools/crawling.ts && \
-    sed -i 's/ids: \[url\]/ids: [id]/g' src/tools/crawling.ts && \
-    perl -i -pe 'BEGIN{undef $/;} s/contents: \{[^}]*text: \{[^}]*\}[^}]*\}/text: true/smg' src/tools/crawling.ts
+    sed -i 's/ids: \\[url\\]/ids: [id]/g' src/tools/crawling.ts && \
+    sed -i 's/logger.start(url);/logger.start(id);/g' src/tools/crawling.ts && \
+    perl -i -pe 'BEGIN{undef $/;} s/contents: \\{[^}]*text: \\{[^}]*\\}[^}]*\\}/text: true/smg' src/tools/crawling.ts
 
 # Update src/types.ts to match simplified interfaces
 RUN sed -i 's/numResults: number;/query: string;/' src/types.ts && \
