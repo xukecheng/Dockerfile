@@ -19,15 +19,24 @@ RUN sed -i "s/'web_search_exa'/'search'/g" src/index.ts && \
     sed -i "s/web_search_exa/search/g" src/index.ts && \
     sed -i "s/crawling_exa/fetch/g" src/index.ts
 
-# Modify src/tools/webSearch.ts - change tool name
+# Modify src/tools/webSearch.ts - change tool name and remove numResults parameter
 RUN sed -i 's/"web_search_exa"/"search"/g' src/tools/webSearch.ts && \
     sed -i "s/web_search_exa-/search-/g" src/tools/webSearch.ts && \
-    sed -i "s/'web_search_exa'/'search'/g" src/tools/webSearch.ts
+    sed -i "s/'web_search_exa'/'search'/g" src/tools/webSearch.ts && \
+    sed -i '/numResults: z\.number()\.optional()\.describe/d' src/tools/webSearch.ts && \
+    sed -i 's/{ query, numResults }/{ query }/g' src/tools/webSearch.ts && \
+    sed -i 's/numResults || API_CONFIG\.DEFAULT_NUM_RESULTS/5/g' src/tools/webSearch.ts
 
-# Modify src/tools/crawling.ts - change tool name  
+# Modify src/tools/crawling.ts - change tool name and parameter, remove maxCharacters
 RUN sed -i 's/"crawling_exa"/"fetch"/g' src/tools/crawling.ts && \
     sed -i "s/crawling_exa-/fetch-/g" src/tools/crawling.ts && \
-    sed -i "s/'crawling_exa'/'fetch'/g" src/tools/crawling.ts
+    sed -i "s/'crawling_exa'/'fetch'/g" src/tools/crawling.ts && \
+    sed -i 's/url: z\.string()\.describe("URL to crawl and extract content from")/id: z.string().describe("ID from search results to fetch document content")/g' src/tools/crawling.ts && \
+    sed -i '/maxCharacters: z\.number()\.optional()\.describe/d' src/tools/crawling.ts && \
+    sed -i 's/{ url, maxCharacters }/{ id }/g' src/tools/crawling.ts && \
+    sed -i 's/{ id, maxCharacters }/{ id }/g' src/tools/crawling.ts && \
+    sed -i 's/ids: \[url\]/ids: [id]/g' src/tools/crawling.ts && \
+    sed -i 's/maxCharacters || API_CONFIG\.DEFAULT_MAX_CHARACTERS/5000/g' src/tools/crawling.ts
 
 # Install dependencies
 RUN npm ci --ignore-scripts
@@ -51,7 +60,7 @@ RUN npm ci --production --ignore-scripts
 ENV EXA_API_KEY=your-api-key-here
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE 8181
 
 # Run the application
 ENTRYPOINT ["node", ".smithery/index.cjs"]

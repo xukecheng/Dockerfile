@@ -39,10 +39,45 @@ docker run -it -e EXA_API_KEY=your_actual_api_key -p 3000:3000 exa-mcp-server:la
 
 ### 工具名称变更
 
-| 原工具名         | 新工具名 | 描述             |
-| ---------------- | -------- | ---------------- |
-| `web_search_exa` | `search` | 网络搜索工具     |
-| `crawling_exa`   | `fetch`  | 网页内容抓取工具 |
+| 原工具名         | 新工具名 | 输入参数        | 描述                                             |
+| ---------------- | -------- | --------------- | ------------------------------------------------ |
+| `web_search_exa` | `search` | `query: string` | 网络搜索工具（固定返回5个结果）                  |
+| `crawling_exa`   | `fetch`  | `id: string`    | 从搜索结果获取文档内容的工具（固定提取5000字符） |
+
+### 输入模式 (Input Schema)
+
+#### search 工具
+```json
+{
+  "query": {
+    "type": "string",
+    "description": "Search query"
+  }
+}
+```
+
+#### fetch 工具  
+```json
+{
+  "id": {
+    "type": "string", 
+    "description": "ID from search results to fetch document content"
+  }
+}
+```
+
+### 默认配置
+
+- **search 工具**：固定返回 5 个搜索结果
+- **fetch 工具**：固定提取 5000 个字符的文档内容
+
+### 深度研究模型集成
+
+根据深度研究模型的要求：
+1. **search 工具**：接收查询并返回搜索结果
+2. **fetch 工具**：接收搜索结果中的 `id` 并返回对应的文档
+
+这确保了与深度研究模型的正确集成，简化了参数结构，避免了参数不匹配的问题。
 
 ### 修改的文件
 
