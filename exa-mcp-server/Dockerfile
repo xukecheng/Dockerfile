@@ -1,5 +1,5 @@
 # Use the official Node.js 18 image as a parent image
-FROM node:18-alpine AS builder
+FROM node:18-alpine
 
 # Install git and perl to clone the repository and process files
 RUN apk add --no-cache git perl
@@ -56,18 +56,6 @@ RUN npm ci --ignore-scripts
 
 # Build the project for Docker
 RUN npm run build
-
-# Use a minimal node image as the base image for running
-FROM node:18-alpine AS runner
-
-WORKDIR /app
-
-# Copy compiled code from the builder stage
-COPY --from=builder /app/.smithery ./.smithery
-COPY --from=builder /app/package.json /app/package-lock.json ./
-
-# Install only production dependencies
-RUN npm ci --production --ignore-scripts
 
 # Set environment variable for the Exa API key
 ENV EXA_API_KEY=your-api-key-here
