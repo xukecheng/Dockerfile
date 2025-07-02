@@ -82,8 +82,43 @@ docker run -it -e EXA_API_KEY=your_actual_api_key -p 3000:3000 exa-mcp-server:la
 ### 修改的文件
 
 1. **src/index.ts** - 更新工具注册表和工具注册逻辑
-2. **src/tools/webSearch.ts** - 更新工具名称和请求 ID
-3. **src/tools/crawling.ts** - 更新工具名称和请求 ID
+2. **src/tools/webSearch.ts** - 更新工具名称、请求 ID 和请求结构
+3. **src/tools/crawling.ts** - 更新工具名称、请求 ID、参数和请求结构
+4. **src/types.ts** - 简化 ExaSearchRequest 和 SearchArgs 接口
+
+### TypeScript 接口变更
+
+#### ExaSearchRequest 接口简化
+```typescript
+// 原接口（复杂）
+export interface ExaSearchRequest {
+  query: string;
+  type: string;
+  numResults: number;
+  contents: { /* 复杂的嵌套结构 */ };
+  // 其他可选字段...
+}
+
+// 新接口（简化）
+export interface ExaSearchRequest {
+  query: string;
+}
+```
+
+#### SearchArgs 接口简化
+```typescript
+// 原接口
+export interface SearchArgs {
+  query: string;
+  numResults?: number;
+  livecrawl?: 'always' | 'fallback' | 'preferred';
+}
+
+// 新接口
+export interface SearchArgs {
+  query: string;
+}
+```
 
 ## 环境变量
 
