@@ -2,6 +2,14 @@
 set -ex
 
 # ---------------------------------------------------------------------------
+# Add custom VNC user (kasmweb only creates kasm_user/kasm_viewer by default)
+# ---------------------------------------------------------------------------
+if [ -n "$VNC_USER" ] && [ "$VNC_USER" != "kasm_user" ] && [ -n "$VNC_PW" ]; then
+    echo -e "${VNC_PW}\n${VNC_PW}\n" | kasmvncpasswd -u "$VNC_USER" -wo 2>/dev/null || true
+    echo "[openclaw] VNC user '${VNC_USER}' created"
+fi
+
+# ---------------------------------------------------------------------------
 # Caddy reverse proxy for CDP (bypass Chrome Host header check)
 # ---------------------------------------------------------------------------
 CDP_PORT="${CDP_PORT:-9222}"
