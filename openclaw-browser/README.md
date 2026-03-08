@@ -17,9 +17,11 @@
 # 构建
 docker build -t openclaw-browser:local .
 
-# 运行
+# 运行 (带 GPU 加速)
 docker run -d --name openclaw-browser \
   --shm-size=1g \
+  --group-add video \
+  --device /dev/dri \
   -p 6901:6901 \
   -p 9222:9222 \
   -e VNC_PW=password \
@@ -40,6 +42,12 @@ curl http://localhost:9222/json/version
 | `CDP_PORT` | `9222` | 对外暴露的 CDP 端口 |
 | `APP_ARGS` | (见 Dockerfile) | Chrome 额外启动参数 |
 | `LAUNCH_URL` | 空 | Chrome 启动时打开的 URL |
+| `KASM_EGL_CARD` | `/dev/dri/card0` | VirtualGL 使用的 GPU 设备 |
+| `KASM_RENDERD` | `/dev/dri/renderD128` | VirtualGL 使用的 render 设备 |
+| `KASMVNC_DYNAMIC_QUALITY_MIN` | `9` | KasmVNC 最低画质 (1-9) |
+| `KASMVNC_DYNAMIC_QUALITY_MAX` | `9` | KasmVNC 最高画质 (1-9) |
+| `KASMVNC_TREAT_LOSSLESS` | `9` | 无损渲染阈值 |
+| `KASMVNC_MAX_FRAME_RATE` | `60` | 最大帧率 |
 
 ## Docker Compose 示例
 
@@ -51,16 +59,19 @@ services:
     image: ghcr.io/xukecheng/openclaw-browser:latest
     container_name: openclaw-browser
     shm_size: "1g"
+    group_add:
+      - video
     ports:
       - "6901:6901"   # KasmVNC Web 桌面
       - "9222:9222"   # CDP
     environment:
       - VNC_PW=password
+      - KASM_EGL_CARD=/dev/dri/card0      # 按实际 GPU 设备调整
+      - KASM_RENDERD=/dev/dri/renderD128
     volumes:
       - ./browser-data:/home/kasm-user
     devices:
-      - /dev/dri/card1:/dev/dri/card1              # Intel 核显（可选）
-      - /dev/dri/renderD129:/dev/dri/renderD129
+      - /dev/dri:/dev/dri                 # GPU 加速
     networks:
       - openclaw-net
 
@@ -101,11 +112,13 @@ OpenClaw `openclaw.json` 浏览器配置：
 |---|---|
 | **Repository** | `ghcr.io/xukecheng/openclaw-browser:latest` |
 | **Network Type** | bridge |
-| **Extra Parameters** | `--shm-size=1g` |
+| **Extra Parameters** | `--shm-size=1g --group-add video` |
 | **Port: 6901** | KasmVNC Web 桌面 (HTTPS) |
 | **Port: 9222** | CDP 协议端口 |
 | **Volume** | `/mnt/user/appdata/openclaw-browser` -> `/home/kasm-user` |
-| **Device (可选)** | `/dev/dri/card1`, `/dev/dri/renderD129` |
+| **Device** | `/dev/dri` (映射整个 GPU 目录) |
+| **KASM_EGL_CARD** | `/dev/dri/card0` (按 `ls /dev/dri/` 确认) |
+| **KASM_RENDERD** | `/dev/dri/renderD128` |
 | **VNC_PW** | 设置 VNC 密码 |
 
 ## 技术原理

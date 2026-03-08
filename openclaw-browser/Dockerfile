@@ -37,6 +37,17 @@ ENV LANG=zh_CN.UTF-8 \
 # Chrome args: CDP + anti-detection (injected via APP_ARGS -> custom_startup.sh)
 ENV APP_ARGS="--start-maximized --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --disable-blink-features=AutomationControlled"
 ENV CDP_PORT=9222
+ENV VNC_USER=xukecheng
+
+# GPU: KasmVNC VirtualGL device paths (override at runtime to match --device mapping)
+ENV KASM_EGL_CARD=/dev/dri/card0
+ENV KASM_RENDERD=/dev/dri/renderD128
+
+# KasmVNC quality (env vars override yaml config at runtime)
+ENV KASMVNC_DYNAMIC_QUALITY_MIN=9 \
+    KASMVNC_DYNAMIC_QUALITY_MAX=9 \
+    KASMVNC_TREAT_LOSSLESS=9 \
+    KASMVNC_MAX_FRAME_RATE=60
 
 # Replace custom_startup.sh to add Caddy CDP proxy
 COPY custom_startup.sh /dockerstartup/custom_startup.sh
