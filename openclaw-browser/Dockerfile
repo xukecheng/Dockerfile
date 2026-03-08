@@ -32,7 +32,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
   && rm -rf /var/lib/apt/lists/*
 
 # Install MCP tools (chrome-devtools-mcp: 13MB zero deps, mcp-proxy: stdio→HTTP bridge)
-RUN npm install -g chrome-devtools-mcp@0.19.0 mcp-proxy@2
+RUN npm install -g chrome-devtools-mcp@0.19.0 mcp-proxy@6
 
 # Generate zh_CN.UTF-8 locale
 RUN sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
