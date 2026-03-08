@@ -48,7 +48,7 @@ echo "[openclaw] Caddy started (:${CDP_PORT} -> CDP :${CHROME_CDP_PORT} + MCP :$
 # chrome-devtools-mcp uses lazy connection: connects to Chrome on first tool
 # call, auto-reconnects if Chrome restarts (--browserUrl mode)
 # ---------------------------------------------------------------------------
-mcp-proxy --port "${MCP_PROXY_PORT}" -- \
+mcp-proxy --port "${MCP_PROXY_PORT}" \
   chrome-devtools-mcp \
     --browserUrl "http://127.0.0.1:${CHROME_CDP_PORT}" \
     --no-usage-statistics \
