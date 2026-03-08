@@ -10,8 +10,9 @@ USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Caddy (CDP reverse proxy), locales, CJK fonts, GPU drivers
-RUN apt-get update \
+# Fix expired Google Chrome GPG key from base image
+RUN rm -f /etc/apt/sources.list.d/google-chrome.list 2>/dev/null; \
+    apt-get update \
   && apt-get install -y --no-install-recommends \
     caddy \
     fonts-noto-cjk \
