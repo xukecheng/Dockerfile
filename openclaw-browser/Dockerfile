@@ -1,29 +1,22 @@
-FROM debian:bookworm-slim
+ARG BASE_TAG="1.16.1"
+ARG BASE_IMAGE="chrome"
+FROM kasmweb/${BASE_IMAGE}:${BASE_TAG}
 
 LABEL org.opencontainers.image.source="https://github.com/xukecheng/Dockerfile"
-LABEL org.opencontainers.image.description="Customized Chromium browser sandbox for OpenClaw with CDP reverse proxy"
+LABEL org.opencontainers.image.description="Customized Chrome browser sandbox for OpenClaw with CDP reverse proxy"
 LABEL org.opencontainers.image.licenses="MIT"
+
+USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install packages: chromium, caddy, xvfb, vnc, fonts, locales
+# Install Caddy (CDP reverse proxy), locales, CJK fonts, GPU drivers
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
     caddy \
-    chromium \
-    curl \
-    fonts-liberation \
-    fonts-noto-color-emoji \
     fonts-noto-cjk \
-    jq \
     locales \
-    novnc \
-    procps \
-    websockify \
-    x11vnc \
-    xvfb \
+    mesa-va-drivers \
   && rm -rf /var/lib/apt/lists/*
 
 # Generate zh_CN.UTF-8 locale
@@ -34,12 +27,14 @@ ENV LANG=zh_CN.UTF-8 \
     LC_ALL=zh_CN.UTF-8 \
     TZ=Asia/Shanghai
 
-# Chrome profile mount point
-RUN mkdir -p /data/chrome-profile
+# Chrome args: CDP + anti-detection (injected via APP_ARGS -> custom_startup.sh)
+ENV APP_ARGS="--start-maximized --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --disable-blink-features=AutomationControlled"
+ENV CDP_PORT=9222
 
-COPY entrypoint.sh /usr/local/bin/openclaw-sandbox-browser
-RUN chmod +x /usr/local/bin/openclaw-sandbox-browser
+# Replace custom_startup.sh to add Caddy CDP proxy
+COPY custom_startup.sh /dockerstartup/custom_startup.sh
+RUN chmod +x /dockerstartup/custom_startup.sh
 
-EXPOSE 9222 5900 6080
+EXPOSE 9222
 
-CMD ["openclaw-sandbox-browser"]
+USER 1000
