@@ -1,0 +1,40 @@
+name: Build openclaw-browser Image
+
+on:
+  push:
+    paths:
+      - "openclaw-browser/**"
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+    working-directory: openclaw-browser
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.PERSONAL_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./openclaw-browser
+          file: ./openclaw-browser/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository_owner }}/openclaw-browser:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
