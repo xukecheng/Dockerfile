@@ -15,20 +15,45 @@ fi
 CDP_PORT="${CDP_PORT:-9222}"
 CHROME_CDP_PORT="9223"
 
+MCP_PROXY_PORT="8765"
+
 cat > /tmp/Caddyfile << EOF
 {
   auto_https off
   admin off
 }
 :${CDP_PORT} {
-  reverse_proxy 127.0.0.1:${CHROME_CDP_PORT} {
-    header_up Host 127.0.0.1
+  handle /mcp {
+    reverse_proxy 127.0.0.1:${MCP_PROXY_PORT}
+  }
+  handle /sse {
+    reverse_proxy 127.0.0.1:${MCP_PROXY_PORT}
+  }
+  handle /ping {
+    reverse_proxy 127.0.0.1:${MCP_PROXY_PORT}
+  }
+  handle {
+    reverse_proxy 127.0.0.1:${CHROME_CDP_PORT} {
+      header_up Host 127.0.0.1
+    }
   }
 }
 EOF
 
 caddy run --config /tmp/Caddyfile &
-echo "[openclaw] Caddy CDP proxy started (:${CDP_PORT} -> 127.0.0.1:${CHROME_CDP_PORT})"
+echo "[openclaw] Caddy started (:${CDP_PORT} -> CDP :${CHROME_CDP_PORT} + MCP :${MCP_PROXY_PORT})"
+
+# ---------------------------------------------------------------------------
+# MCP Server (chrome-devtools-mcp via mcp-proxy, streamable HTTP)
+# chrome-devtools-mcp uses lazy connection: connects to Chrome on first tool
+# call, auto-reconnects if Chrome restarts (--browserUrl mode)
+# ---------------------------------------------------------------------------
+mcp-proxy --port "${MCP_PROXY_PORT}" -- \
+  chrome-devtools-mcp \
+    --browserUrl "http://127.0.0.1:${CHROME_CDP_PORT}" \
+    --no-usage-statistics \
+    --no-performance-crux &
+echo "[openclaw] MCP server started (chrome-devtools-mcp via mcp-proxy :${MCP_PROXY_PORT})"
 
 # ---------------------------------------------------------------------------
 # Original kasmweb Chrome startup logic

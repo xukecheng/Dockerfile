@@ -26,6 +26,14 @@ RUN apt-get update \
     mesa-va-drivers \
   && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js 22 LTS (chrome-devtools-mcp requires >= 22.12.0)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install MCP tools (chrome-devtools-mcp: 13MB zero deps, mcp-proxy: stdio→HTTP bridge)
+RUN npm install -g chrome-devtools-mcp@0.19.0 mcp-proxy@2
+
 # Generate zh_CN.UTF-8 locale
 RUN sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
   && locale-gen
