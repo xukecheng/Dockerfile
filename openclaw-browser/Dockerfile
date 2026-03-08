@@ -10,9 +10,15 @@ USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Fix expired Google Chrome GPG key from base image
-RUN rm -f /etc/apt/sources.list.d/google-chrome.list 2>/dev/null; \
-    apt-get update \
+# Remove expired Google Chrome apt source from base image
+RUN rm -f /etc/apt/sources.list.d/google-chrome.list 2>/dev/null
+
+# Add Caddy official apt repo + install packages
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends debian-keyring debian-archive-keyring apt-transport-https curl \
+  && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg \
+  && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list \
+  && apt-get update \
   && apt-get install -y --no-install-recommends \
     caddy \
     fonts-noto-cjk \
