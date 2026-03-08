@@ -43,6 +43,10 @@ ENV VNC_USER=xukecheng
 ENV KASM_EGL_CARD=/dev/dri/card0
 ENV KASM_RENDERD=/dev/dri/renderD128
 
+# Fix VirtualGL: base image wrapper checks -O (file owned by user) which fails
+# for /dev/dri/* devices owned by root. Replace with -r (readable) check.
+RUN sed -i 's/ -O / -r /g' /usr/bin/google-chrome
+
 # KasmVNC quality (env vars override yaml config at runtime)
 ENV KASMVNC_DYNAMIC_QUALITY_MIN=9 \
     KASMVNC_DYNAMIC_QUALITY_MAX=9 \
