@@ -43,6 +43,7 @@ curl http://localhost:9222/ping
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `VNC_PW` | `password` | KasmVNC 登录密码 |
+| `VNC_USER` | `openclaw` | KasmVNC 登录用户名（可自定义） |
 | `CDP_PORT` | `9222` | 对外暴露的 CDP 端口 |
 | `APP_ARGS` | (见 Dockerfile) | Chrome 额外启动参数 |
 | `LAUNCH_URL` | 空 | Chrome 启动时打开的 URL |

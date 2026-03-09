@@ -49,7 +49,7 @@ ENV LANG=zh_CN.UTF-8 \
 # Chrome args: CDP + anti-detection (injected via APP_ARGS -> custom_startup.sh)
 ENV APP_ARGS="--start-maximized --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --disable-blink-features=AutomationControlled"
 ENV CDP_PORT=9222
-ENV VNC_USER=xukecheng
+ENV VNC_USER=openclaw
 
 # GPU: DRI3 direct rendering (bypasses VirtualGL, Chrome ANGLE/EGL talks to GPU directly)
 # HW3D=true enables DRI3 in KasmVNC's Xvnc server
