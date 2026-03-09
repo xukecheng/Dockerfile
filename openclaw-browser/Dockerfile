@@ -35,8 +35,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 # Patch: inject icons into serverInfo (SDK already supports 2025-11-25 protocol)
 ARG MCP_ICON_URL="https://raw.githubusercontent.com/xukecheng/Dockerfile/main/openclaw-browser/icon.png"
 RUN npm install -g chrome-devtools-mcp@0.19.0 mcp-proxy@6 \
-  && CDT_SERVER=$(node -e "console.log(require.resolve('chrome-devtools-mcp').replace('/index.js','/server.js'))") \
-  && sed -i "s|version: VERSION,|version: VERSION, icons: [{ src: '${MCP_ICON_URL}', mimeType: 'image/png', sizes: ['1024x1024'] }],|" "$CDT_SERVER"
+  && sed -i "s|version: VERSION,|version: VERSION, icons: [{ src: '${MCP_ICON_URL}', mimeType: 'image/png', sizes: ['1024x1024'] }],|" \
+    /usr/lib/node_modules/chrome-devtools-mcp/build/src/server.js
 
 # Generate zh_CN.UTF-8 locale
 RUN sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
