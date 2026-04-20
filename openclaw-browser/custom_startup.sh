@@ -33,9 +33,7 @@ cat > /tmp/Caddyfile << EOF
     reverse_proxy 127.0.0.1:${MCP_PROXY_PORT}
   }
   handle {
-    reverse_proxy 127.0.0.1:${CHROME_CDP_PORT} {
-      header_up Host 127.0.0.1
-    }
+    reverse_proxy 127.0.0.1:${CHROME_CDP_PORT}
   }
 }
 EOF
