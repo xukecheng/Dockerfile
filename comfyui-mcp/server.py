@@ -6,7 +6,7 @@
 - 无状态；所有调用方共用 ComfyUI 的单 GPU FIFO 队列
 - 等待期间通过 MCP progress 通知汇报排队位置和采样步数（客户端不会超时）
 - 队列过长直接拒绝，防止 agent 循环提交
-- 返回一张 ≤1024 的 JPEG 预览 + 原图在 Unraid 上的路径和 URL
+- 返回全分辨率图片（JPEG）+ PNG 原图的签名 URL；本机图片经一次性签名 URL 上传，不需要 ssh
 """
 from __future__ import annotations
 
@@ -44,7 +44,6 @@ PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://10.10.10.2:8189").rstrip("/") 
 AUTH_TOKENS = {t.split(":", 1)[1].strip(): t.split(":", 1)[0].strip()
                for t in os.environ.get("MCP_AUTH_TOKENS", "").split(",") if ":" in t}
 IMAGE_SIGN_KEY = os.environ.get("IMAGE_SIGN_KEY") or (next(iter(AUTH_TOKENS)) if AUTH_TOKENS else "dev")
-OUTPUT_HOST_DIR = os.environ.get("OUTPUT_HOST_DIR", "/mnt/user/appdata/comfyui/basedir/output")  # Unraid 宿主机路径
 MAX_PENDING = int(os.environ.get("MAX_PENDING", "5"))
 PORT = int(os.environ.get("PORT", "8189"))
 
@@ -66,14 +65,14 @@ STEPS = {"final": 40, "draft": 20}
 EDIT_STEPS = {"final": 40, "draft": 40}          # 编辑 20 步会过锐/HDR 感，draft 只降分辨率不降步数
 EDIT_REF_RES = {"final": 2048, "draft": 1024}   # 编辑模式：参考图/画布的目标像素规模
 # 实测（RTX 4060 Ti 16GB, int8）用于预估等待时间，单位秒
-EST_SECONDS = {("generate", "final"): 240, ("generate", "draft"): 35, ("edit", "final"): 300, ("edit", "draft"): 90}
+EST_SECONDS = {("generate", "final"): 240, ("generate", "draft"): 30, ("edit", "final"): 420, ("edit", "draft"): 90}
 
 INSTRUCTIONS = """本服务在家里 Unraid 的 RTX 4060 Ti 上跑 Qwen-Image-2.1（文生图 + 图片编辑，官方 int8 重打包权重），通过 ComfyUI 执行。
 
 何时用：用户要生成图片、海报、插画、示意图，或要修改一张已有图片（换物体、改风格、改文字、扩展画面）。
 
 必须知道的限制：
-- 单 GPU、单队列：一次只能出一张图，所有调用方（Claude Code / Hermes）共用同一条 FIFO 队列。final 档 2K 一张约 4 分钟，draft 约 35 秒。工具会阻塞到出图为止并持续汇报进度，不要重复提交同一请求。
+- 单 GPU、单队列：一次只能出一张图，所有调用方共用同一条 FIFO 队列。耗时（不含排队）：文生图 final 2K 约 4 分钟、draft 约 30 秒；编辑 final 约 6-7 分钟、draft 约 1.5 分钟。工具会阻塞到出图为止并持续汇报进度，**耐心等，不要中途取消、不要重复提交**。若调用被取消，正在跑的任务仍会跑完，图可在 ComfyUI 队列面板找到。
 - 队列里已有 >5 个任务时工具会直接拒绝并给出预估等待，此时告诉用户稍后再试，不要循环重试。
 
 提示词写法（实测结论）：
@@ -89,6 +88,9 @@ class StaticTokenVerifier(TokenVerifier):
         name = AUTH_TOKENS.get(token)
         return AccessToken(token=token, client_id=name, scopes=["image"]) if name else None
 
+
+import logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 if AUTH_TOKENS:
     mcp = MCPServer(
@@ -128,6 +130,31 @@ async def image_route(request: Request) -> Response:
     if r.status_code != 200:
         return JSONResponse({"error": "not found"}, status_code=404)
     return Response(r.content, media_type=r.headers.get("content-type", "image/png"))
+
+
+def _upload_sig(uid: str, exp: int) -> str:
+    return hmac.new(IMAGE_SIGN_KEY.encode(), f"upload/{uid}/{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+@mcp.custom_route("/upload", methods=["POST"])
+async def upload_route(request: Request) -> Response:
+    """一次性签名上传：request_upload() 签发 URL，客户端 curl -F image=@file 上传，返回 ComfyUI 里的文件名"""
+    uid, exp, sig = request.query_params.get("id", ""), request.query_params.get("exp", "0"), request.query_params.get("sig", "")
+    if not uid.isalnum() or not exp.isdigit() or int(exp) < time.time() or not hmac.compare_digest(sig, _upload_sig(uid, int(exp))):
+        return JSONResponse({"error": "invalid or expired upload url"}, status_code=403)
+    form = await request.form()
+    f = form.get("image")
+    if f is None:
+        return JSONResponse({"error": "multipart field 'image' required"}, status_code=400)
+    data = await f.read()
+    if len(data) > 30_000_000:
+        return JSONResponse({"error": "image too large (max 30 MB)"}, status_code=413)
+    try:
+        PILImage.open(io.BytesIO(data)).verify()
+    except Exception:
+        return JSONResponse({"error": "not an image"}, status_code=400)
+    name = await _upload(data)
+    return JSONResponse({"image": name, "hint": f"传给 edit_image 的 image 参数: {name}"})
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -196,8 +223,11 @@ def edit_graph(prompt: str, image_name: str, ref_res: int, steps: int, seed: int
     return g
 
 
+UPLOADED_NAME = re.compile(r"^mcp_[0-9a-f]{12}\.png$")
+
+
 async def _load_image_bytes(image: str) -> bytes:
-    """支持三种形式：http(s) URL / data URI 或裸 base64 / Unraid 宿主机路径（需挂载进容器）"""
+    """支持：http(s) URL / data URI 或裸 base64 / 容器可见路径。已上传的 mcp_xxx.png 文件名在调用处直接用，不经这里"""
     if image.startswith(("http://", "https://")):
         async with httpx.AsyncClient(timeout=60, follow_redirects=True) as c:
             r = await c.get(image)
@@ -252,7 +282,9 @@ async def _run(graph: dict, kind: str, quality: str, ctx: Context) -> dict:
                     mt, d = msg.get("type"), msg.get("data", {})
                     if mt == "progress" and d.get("prompt_id") == pid:
                         step = d.get("value", 0)
-                        await ctx.report_progress(step, total_steps, f"采样 {step}/{total_steps} 步 · 已用 {time.time() - t0:.0f}s")
+                        el = time.time() - t0
+                        eta = (el / step) * (total_steps - step) if step else 0
+                        await ctx.report_progress(step, total_steps, f"采样 {step}/{total_steps} 步 · 已用 {el:.0f}s · 预计还需 {eta:.0f}s")
                         continue
                     if mt == "execution_error" and d.get("prompt_id") == pid:
                         raise ToolError(f"ComfyUI 执行出错: {d.get('exception_message', '')[:600]}")
@@ -262,14 +294,12 @@ async def _run(graph: dict, kind: str, quality: str, ctx: Context) -> dict:
                 if pos is None:
                     break
                 if pos > 0:
-                    await ctx.report_progress(0, total_steps, f"排队中，前面还有 {pos} 个任务 · 已等 {time.time() - t0:.0f}s")
+                    await ctx.report_progress(0, total_steps, f"排队中，前面还有 {pos} 个任务（每个约 {EST_SECONDS[(kind, quality)] // 60} 分钟）· 已等 {time.time() - t0:.0f}s")
     except asyncio.CancelledError:
-        # 调用方放弃等待：把自己的任务撤掉，别留孤儿任务占 GPU
+        # 调用方放弃等待：只撤销还在排队的任务；正在跑的让它跑完落盘（几分钟的活杀掉太亏，图可从 ComfyUI 队列面板拿）
         async with _client() as c:
             pos = await _queue_position(pid)
-            if pos == 0:
-                await c.post("/interrupt")
-            elif pos:
+            if pos and pos > 0:
                 await c.post("/queue", json={"delete": [pid]})
         raise
 
@@ -288,23 +318,23 @@ async def _run(graph: dict, kind: str, quality: str, ctx: Context) -> dict:
     return im
 
 
-async def _fetch_result(im: dict) -> tuple[bytes, str, str]:
-    """返回 (原图字节, 宿主机路径, 可访问 URL)"""
+async def _fetch_result(im: dict) -> tuple[bytes, str]:
+    """返回 (原图字节, 签名 URL)"""
     sub = im.get("subfolder", "")
     q = f"filename={im['filename']}&subfolder={sub}&type={im['type']}"
     async with _client() as c:
         data = (await c.get(f"/view?{q}")).content
-    host_path = os.path.join(OUTPUT_HOST_DIR, sub, im["filename"]) if sub else os.path.join(OUTPUT_HOST_DIR, im["filename"])
-    return data, host_path, _image_url(sub, im["filename"])
+    return data, _image_url(sub, im["filename"])
 
 
-def _preview(data: bytes, max_side: int = 1024) -> tuple[Image, tuple[int, int]]:
+def _full_jpeg(data: bytes) -> tuple[Image, tuple[int, int]]:
+    """全分辨率返回。Claude API 单图上限 5 MB，2K PNG 约 7.5 MB 传不过去，所以图片内容用全分辨率 JPEG，PNG 原文件走 URL"""
     img = PILImage.open(io.BytesIO(data))
     full = img.size
-    img = img.convert("RGB")
-    img.thumbnail((max_side, max_side))
     buf = io.BytesIO()
-    img.save(buf, "JPEG", quality=85)
+    img.convert("RGB").save(buf, "JPEG", quality=92, optimize=True)
+    if buf.tell() > 4_500_000:  # 极端情况下再降质量保证不超限
+        buf = io.BytesIO(); img.convert("RGB").save(buf, "JPEG", quality=80, optimize=True)
     return Image(data=buf.getvalue(), format="jpeg"), full
 
 
@@ -324,7 +354,7 @@ async def generate_image(
     seed: int | None = None,
     caller: str = "unknown",
 ) -> list:
-    """用 Qwen-Image-2.1 文生图。阻塞直到出图（final 约 4 分钟，draft 约 35 秒），期间会持续汇报进度。
+    """用 Qwen-Image-2.1 文生图。阻塞直到出图（final 约 4 分钟，draft 约 30 秒，另加排队时间），期间会持续汇报进度；不要中途取消。
 
     quality 怎么选：
     - final（默认）：官方 2K 分辨率、40 步。用户要一张能用的图、没有说要快 → 用这个。
@@ -340,10 +370,9 @@ async def generate_image(
     seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
     graph = t2i_graph(prompt, w, h, STEPS[quality], seed, _prefix("gen", caller))
     im = await _run(graph, "generate", quality, ctx)
-    data, host_path, url = await _fetch_result(im)
-    preview, full = _preview(data)
-    return [preview, f"已生成 {full[0]}x{full[1]}，{STEPS[quality]} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\n"
-                     f"原图（Unraid）: {host_path}\nURL: {url}\n上面是缩小到 1024 的预览。"]
+    data, url = await _fetch_result(im)
+    img, full = _full_jpeg(data)
+    return [img, f"已生成 {full[0]}x{full[1]}，{STEPS[quality]} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\nPNG 原图: {url}"]
 
 
 @mcp.tool()
@@ -357,20 +386,33 @@ async def edit_image(
 ) -> list:
     """用 Qwen-Image-2.1 编辑一张已有图片：换物体、改风格、改图中文字、扩展画面、做成海报等。输出画布跟随参考图的宽高比。
 
-    image 接受三种形式：http(s) URL；base64（可带 data:image/...;base64, 前缀）；或 Unraid 上的文件路径（/mnt/user/... 开头，须是容器挂载可见的）。
+    image 接受：① 本机文件 → 先调 request_upload() 拿到上传命令，执行后得到的文件名（mcp_xxx.png）；② http(s) URL（包括本服务之前返回的 PNG 原图 URL）；③ base64。
+    绝不要用 ssh/scp 把文件搬到服务器，也不要传服务器路径。
     prompt 直接描述"要变成什么"，模型会保留参考图的构图和人物身份。一次一个明确改动最稳；要做多处修改就串联多次调用，把上一次的输出 URL 当下一次的 image。
-    quality：final = 参考图放大到 2K 规模处理（约 5 分钟）；draft = 1024 规模（约 1.5 分钟），试提示词时用。
+    quality：final = 参考图放大到 2K 规模处理（**约 6-7 分钟**，耐心等）；draft = 1024 规模（约 1.5 分钟），试提示词时用。
     """
     caller = _caller_name(caller)
-    data = await _load_image_bytes(image)
-    name = await _upload(data)
+    if UPLOADED_NAME.match(image):
+        name = image                      # request_upload → curl 上传后返回的文件名
+    else:
+        name = await _upload(await _load_image_bytes(image))
     seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
     graph = edit_graph(prompt, name, EDIT_REF_RES[quality], EDIT_STEPS[quality], seed, _prefix("edit", caller))
     im = await _run(graph, "edit", quality, ctx)
-    out, host_path, url = await _fetch_result(im)
-    preview, full = _preview(out)
-    return [preview, f"已编辑，输出 {full[0]}x{full[1]}，{EDIT_STEPS[quality]} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\n"
-                     f"原图（Unraid）: {host_path}\nURL: {url}\n上面是缩小到 1024 的预览。"]
+    out, url = await _fetch_result(im)
+    img, full = _full_jpeg(out)
+    return [img, f"已编辑，输出 {full[0]}x{full[1]}，{EDIT_STEPS[quality]} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\nPNG 原图: {url}"]
+
+
+@mcp.tool()
+async def request_upload() -> str:
+    """要编辑一张本机（调用方电脑上）的图片时先调这个：返回一条 curl 命令，用它把文件上传（URL 带 10 分钟有效的一次性签名，不含任何密钥），
+    命令输出的 JSON 里 "image" 字段就是 edit_image 的 image 参数。不要用 ssh/scp。"""
+    uid, exp = uuid.uuid4().hex[:16], int(time.time()) + 600
+    url = f"{PUBLIC_URL}/upload?id={uid}&exp={exp}&sig={_upload_sig(uid, exp)}"
+    return (f"在调用方本机执行（把 <file> 换成图片路径）：\n"
+            f"curl -sS -F image=@<file> '{url}'\n"
+            f"返回 JSON 的 image 字段（形如 mcp_xxxxxxxxxxxx.png）传给 edit_image。URL 10 分钟内有效，可重复使用。")
 
 
 @mcp.tool()

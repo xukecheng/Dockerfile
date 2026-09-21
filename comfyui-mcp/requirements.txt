@@ -2,3 +2,4 @@ mcp==2.2.0
 httpx
 websockets
 pillow
+python-multipart
