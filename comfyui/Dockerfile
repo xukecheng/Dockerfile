@@ -6,8 +6,9 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# gcc/libc6-dev：int8_convrot 权重走 Triton 内核，运行时需要 C 编译器，否则报 "Failed to find C compiler"
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git ca-certificates libgl1 libglib2.0-0 libgomp1 && \
+        git ca-certificates libgl1 libglib2.0-0 libgomp1 gcc libc6-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # ComfyUI README：20 系及以上必须用 cu130+；torch 版本尽量新但避开发布不足两周的
