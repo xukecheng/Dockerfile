@@ -11,15 +11,25 @@
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `COMFY_URL` | `http://comfyui:8188` | 容器内访问 ComfyUI（同一 docker 网络用容器名） |
-| `COMFY_PUBLIC_URL` | `http://10.10.10.2:8188` | 返回给调用方的图片 URL 前缀 |
+| `PUBLIC_URL` | `http://10.10.10.2:8189` | 本服务对调用方的地址，图片 URL 前缀（走 Cloudflare 时改成公网域名） |
+| `MCP_AUTH_TOKENS` | 空 | `name1:token1,name2:token2`。非空即启用 Bearer 鉴权，`name` 会作为 caller 写进输出文件名；为空则不鉴权，只能在纯内网用 |
+| `IMAGE_SIGN_KEY` | 取第一个 token | 图片 URL 的 HMAC 签名密钥 |
 | `OUTPUT_HOST_DIR` | `/mnt/user/appdata/comfyui/basedir/output` | 返回给调用方的宿主机路径前缀 |
 | `MAX_PENDING` | `5` | 排队上限 |
 | `PORT` | `8189` | |
 
+## 安全
+
+- MCP 端点 `/mcp`：Bearer token（`MCP_AUTH_TOKENS`），401 带标准 `WWW-Authenticate`
+- 图片 `/image/<sub>/<file>?sig=`：HMAC 签名 URL，无需 header，篡改即 403；由本服务代理 ComfyUI 的 `/view`，**ComfyUI 8188 永远不要对外暴露**（`/prompt` 能执行任意工作流）
+- `/health`：无鉴权，只返回队列状态
+
+对外发布走 Cloudflare Tunnel + Access（Service Token）；应用层 token 作为第二道。
+
 ## 接入
 
 ```bash
-claude mcp add --transport http qwen-image http://10.10.10.2:8189/mcp
+claude mcp add --transport http qwen-image https://<host>/mcp --header "Authorization: Bearer <token>"
 ```
 
-Hermes：`config.yaml` 里加一条 HTTP 类型的 MCP server，`url: http://10.10.10.2:8189/mcp`。
+Hermes：`config.yaml` 的 `mcp_servers` 加一条 `url` + `headers: {Authorization: Bearer <token>}`，`timeout` 给到 1800（2K 一张 4 分钟，加排队）。

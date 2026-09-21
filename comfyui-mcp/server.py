@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import hmac
 import io
 import json
 import os
@@ -26,11 +28,22 @@ import httpx
 import websockets
 from PIL import Image as PILImage
 
+from pydantic import AnyHttpUrl
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import Context, Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 COMFY_URL = os.environ.get("COMFY_URL", "http://comfyui:8188").rstrip("/")          # 容器内访问 ComfyUI
-COMFY_PUBLIC_URL = os.environ.get("COMFY_PUBLIC_URL", "http://10.10.10.2:8188").rstrip("/")  # 返回给调用方的 URL
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://10.10.10.2:8189").rstrip("/")      # 本服务对调用方的地址（图片 URL 前缀）
+# 鉴权：MCP_AUTH_TOKENS="name1:token1,name2:token2"。为空则不鉴权（只应在纯内网用）
+AUTH_TOKENS = {t.split(":", 1)[1].strip(): t.split(":", 1)[0].strip()
+               for t in os.environ.get("MCP_AUTH_TOKENS", "").split(",") if ":" in t}
+IMAGE_SIGN_KEY = os.environ.get("IMAGE_SIGN_KEY") or (next(iter(AUTH_TOKENS)) if AUTH_TOKENS else "dev")
 OUTPUT_HOST_DIR = os.environ.get("OUTPUT_HOST_DIR", "/mnt/user/appdata/comfyui/basedir/output")  # Unraid 宿主机路径
 MAX_PENDING = int(os.environ.get("MAX_PENDING", "5"))
 PORT = int(os.environ.get("PORT", "8189"))
@@ -71,7 +84,59 @@ INSTRUCTIONS = """本服务在家里 Unraid 的 RTX 4060 Ti 上跑 Qwen-Image-2.
 - 编辑模式会锚定参考图的构图和人物身份；一次只描述一个明确的改动最稳，多个改动请分多次调用串联。
 """
 
-mcp = MCPServer("qwen-image", instructions=INSTRUCTIONS)
+class StaticTokenVerifier(TokenVerifier):
+    async def verify_token(self, token: str) -> AccessToken | None:
+        name = AUTH_TOKENS.get(token)
+        return AccessToken(token=token, client_id=name, scopes=["image"]) if name else None
+
+
+if AUTH_TOKENS:
+    mcp = MCPServer(
+        "qwen-image", instructions=INSTRUCTIONS,
+        token_verifier=StaticTokenVerifier(),
+        auth=AuthSettings(issuer_url=AnyHttpUrl(PUBLIC_URL), resource_server_url=AnyHttpUrl(PUBLIC_URL + "/mcp"), required_scopes=["image"]),
+    )
+else:
+    mcp = MCPServer("qwen-image", instructions=INSTRUCTIONS)
+
+
+def _caller_name(fallback: str) -> str:
+    tok = get_access_token()
+    return tok.client_id if tok and tok.client_id else fallback
+
+
+# ---------- 图片下载（签名 URL，不暴露 ComfyUI） ----------
+
+def _sign(sub: str, filename: str) -> str:
+    return hmac.new(IMAGE_SIGN_KEY.encode(), f"{sub}/{filename}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def _image_url(sub: str, filename: str) -> str:
+    path = f"{sub}/{filename}" if sub else filename
+    return f"{PUBLIC_URL}/image/{path}?sig={_sign(sub, filename)}"
+
+
+@mcp.custom_route("/image/{path:path}", methods=["GET"])
+async def image_route(request: Request) -> Response:
+    """代理 ComfyUI 的 /view，只放行带正确 HMAC 签名的 URL；这样对外只需暴露本服务一个域名"""
+    path = request.path_params["path"]
+    sub, _, filename = path.rpartition("/")
+    if ".." in path or not filename or not hmac.compare_digest(request.query_params.get("sig", ""), _sign(sub, filename)):
+        return JSONResponse({"error": "invalid signature"}, status_code=403)
+    async with _client() as c:
+        r = await c.get("/view", params={"filename": filename, "subfolder": sub, "type": "output"})
+    if r.status_code != 200:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return Response(r.content, media_type=r.headers.get("content-type", "image/png"))
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health(request: Request) -> Response:
+    try:
+        running, pending = await _queue_state()
+        return JSONResponse({"status": "ok", "auth": bool(AUTH_TOKENS), "queue_running": running, "queue_pending": pending})
+    except Exception as e:  # ComfyUI 不可达
+        return JSONResponse({"status": "comfyui_unreachable", "error": str(e)[:200]}, status_code=503)
 
 
 # ---------- ComfyUI 交互 ----------
@@ -230,7 +295,7 @@ async def _fetch_result(im: dict) -> tuple[bytes, str, str]:
     async with _client() as c:
         data = (await c.get(f"/view?{q}")).content
     host_path = os.path.join(OUTPUT_HOST_DIR, sub, im["filename"]) if sub else os.path.join(OUTPUT_HOST_DIR, im["filename"])
-    return data, host_path, f"{COMFY_PUBLIC_URL}/view?{q}"
+    return data, host_path, _image_url(sub, im["filename"])
 
 
 def _preview(data: bytes, max_side: int = 1024) -> tuple[Image, tuple[int, int]]:
@@ -268,8 +333,9 @@ async def generate_image(
 
     aspect 按用途选：海报/手机壁纸 3:4 或 9:16，横幅/桌面 16:9，头像/图标 1:1。
     seed 不传则随机；想复现同一张图时传回上次返回的 seed。
-    caller 填调用方标识（如 claude-code / hermes-xkc），只用于输出文件归档，不影响排队顺序。
+    caller 填调用方标识（如 claude-code / hermes-xkc），只用于输出文件归档；开启鉴权时自动取 token 对应的名字，可不填。
     """
+    caller = _caller_name(caller)
     w, h = SIZES[aspect][quality]
     seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
     graph = t2i_graph(prompt, w, h, STEPS[quality], seed, _prefix("gen", caller))
@@ -295,6 +361,7 @@ async def edit_image(
     prompt 直接描述"要变成什么"，模型会保留参考图的构图和人物身份。一次一个明确改动最稳；要做多处修改就串联多次调用，把上一次的输出 URL 当下一次的 image。
     quality：final = 参考图放大到 2K 规模处理（约 5 分钟）；draft = 1024 规模（约 1.5 分钟），试提示词时用。
     """
+    caller = _caller_name(caller)
     data = await _load_image_bytes(image)
     name = await _upload(data)
     seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
