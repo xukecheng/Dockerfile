@@ -50,5 +50,7 @@ RUN printf '#!/bin/sh\nexec /sd.cpp/bin/sd-cli "$@"\n' > /sd-cli && \
     chmod +x /sd-cli /sd-server
 
 VOLUME ["/models", "/output"]
+# sd-server 的 /sdcpp/v1/capabilities 会递归扫描 cwd 找模型；cwd 为 / 时扫到 /proc 会抛异常 → 500，Web UI 显示 service unavailable
+WORKDIR /output
 EXPOSE 1234
 ENTRYPOINT ["/sd-server", "--listen-ip", "0.0.0.0", "--listen-port", "1234"]
