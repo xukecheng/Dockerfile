@@ -51,28 +51,22 @@ UNET = os.environ.get("UNET_NAME", "qwen_image_2.1_int8_convrot.safetensors")
 CLIP = os.environ.get("CLIP_NAME", "qwen3vl_8b_int8_convrot.safetensors")
 VAE = os.environ.get("VAE_NAME", "qwen_image_2.1_vae_bf16.safetensors")
 
-# 官方 Qwen-Image-2.1 README 推荐的 2K 尺寸表（final）；draft 约为其一半、对齐 32
-SIZES = {
-    "1:1":  {"final": (2048, 2048), "draft": (1024, 1024)},
-    "4:3":  {"final": (2400, 1792), "draft": (1216, 896)},
-    "3:4":  {"final": (1792, 2400), "draft": (896, 1216)},
-    "3:2":  {"final": (2528, 1696), "draft": (1280, 864)},
-    "2:3":  {"final": (1696, 2528), "draft": (864, 1280)},
-    "16:9": {"final": (2752, 1536), "draft": (1376, 768)},
-    "9:16": {"final": (1536, 2752), "draft": (768, 1376)},
-}
-STEPS = {"final": 40, "draft": 20}
-EDIT_STEPS = {"final": 40, "draft": 40}          # 编辑 20 步会过锐/HDR 感，draft 只降分辨率不降步数
-EDIT_REF_RES = {"final": 2048, "draft": 1024}   # 编辑模式：参考图/画布的目标像素规模
+# 1K 为默认（4060 Ti 上 1 分钟内）；2k 是官方 README 的 2K 尺寸表，4 分钟一张，必须显式指定
+_1K = {"1:1": (1024, 1024), "4:3": (1216, 896), "3:4": (896, 1216), "3:2": (1280, 864), "2:3": (864, 1280), "16:9": (1376, 768), "9:16": (768, 1376)}
+_2K = {"1:1": (2048, 2048), "4:3": (2400, 1792), "3:4": (1792, 2400), "3:2": (2528, 1696), "2:3": (1696, 2528), "16:9": (2752, 1536), "9:16": (1536, 2752)}
+SIZES = {a: {"draft": _1K[a], "final": _1K[a], "2k": _2K[a]} for a in _1K}
+STEPS = {"draft": 20, "final": 40, "2k": 40}
+EDIT_STEPS = {"draft": 20, "final": 40}
+EDIT_REF_RES = {"draft": 1024, "final": 1024}   # 编辑一律 1024 规模：1536 要 4 分钟、2048 要 10 分钟，用户不接受
 # 实测（RTX 4060 Ti 16GB, int8）用于预估等待时间，单位秒
-EST_SECONDS = {("generate", "final"): 240, ("generate", "draft"): 30, ("edit", "final"): 420, ("edit", "draft"): 90}
+EST_SECONDS = {("generate", "draft"): 30, ("generate", "final"): 60, ("generate", "2k"): 240, ("edit", "draft"): 50, ("edit", "final"): 90}
 
 INSTRUCTIONS = """本服务在家里 Unraid 的 RTX 4060 Ti 上跑 Qwen-Image-2.1（文生图 + 图片编辑，官方 int8 重打包权重），通过 ComfyUI 执行。
 
 何时用：用户要生成图片、海报、插画、示意图，或要修改一张已有图片（换物体、改风格、改文字、扩展画面）。
 
 必须知道的限制：
-- 单 GPU、单队列：一次只能出一张图，所有调用方共用同一条 FIFO 队列。耗时（不含排队）：文生图 final 2K 约 4 分钟、draft 约 30 秒；编辑 final 约 6-7 分钟、draft 约 1.5 分钟。工具会阻塞到出图为止并持续汇报进度，**耐心等，不要中途取消、不要重复提交**。若调用被取消，正在跑的任务仍会跑完，图可在 ComfyUI 队列面板找到。
+- 单 GPU、单队列：一次只能出一张图，所有调用方共用同一条 FIFO 队列。耗时（不含排队）：文生图 final(1K) 约 1 分钟、draft 约 30 秒、2k 约 4 分钟；编辑 final 约 1.5 分钟、draft 约 50 秒。工具会阻塞到出图为止并持续汇报进度，**不要中途取消、不要重复提交**。若调用被取消，正在跑的任务仍会跑完，图可在 ComfyUI 队列面板找到。
 - 队列里已有 >5 个任务时工具会直接拒绝并给出预估等待，此时告诉用户稍后再试，不要循环重试。
 
 提示词写法（实测结论）：
@@ -350,16 +344,17 @@ async def generate_image(
     prompt: str,
     ctx: Context,
     aspect: Literal["1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16"] = "1:1",
-    quality: Literal["final", "draft"] = "final",
+    quality: Literal["final", "draft", "2k"] = "final",
     seed: int | None = None,
     caller: str = "unknown",
 ) -> list:
-    """用 Qwen-Image-2.1 文生图。阻塞直到出图（final 约 4 分钟，draft 约 30 秒，另加排队时间），期间会持续汇报进度；不要中途取消。
+    """用 Qwen-Image-2.1 文生图。阻塞直到出图（final 约 1 分钟，draft 约 30 秒，2k 约 4 分钟，另加排队时间），期间持续汇报进度；不要中途取消。
 
     quality 怎么选：
-    - final（默认）：官方 2K 分辨率、40 步。用户要一张能用的图、没有说要快 → 用这个。
-    - draft：约 1024 级、20 步。用户说"先看看 / 快速试试 / 出几个方向 / 草稿"，或同一提示词要连续改多版 → 用这个；满意后再用 final 出正式图。
-      注意 draft 和 final 即使同 seed 构图也不同，draft 不能"精修"成 final，只能用来试提示词。
+    - final（默认）：1K（1024² 级）、40 步。用户要一张能用的图 → 用这个。
+    - draft：1K、20 步。用户说"先看看 / 快速试试 / 出几个方向"，或同一提示词要连续改多版 → 用这个。
+    - 2k：官方 2K 尺寸表（2048² 级）、40 步，约 4 分钟。**只在用户明确要求 2K / 大图 / 打印用途时才用**，否则不要选。
+      注意各档即使同 seed 构图也不同，draft 不能"精修"成 final。
 
     aspect 按用途选：海报/手机壁纸 3:4 或 9:16，横幅/桌面 16:9，头像/图标 1:1。
     seed 不传则随机；想复现同一张图时传回上次返回的 seed。
@@ -389,7 +384,7 @@ async def edit_image(
     image 接受：① 本机文件 → 先调 request_upload() 拿到上传命令，执行后得到的文件名（mcp_xxx.png）；② http(s) URL（包括本服务之前返回的 PNG 原图 URL）；③ base64。
     绝不要用 ssh/scp 把文件搬到服务器，也不要传服务器路径。
     prompt 直接描述"要变成什么"，模型会保留参考图的构图和人物身份。一次一个明确改动最稳；要做多处修改就串联多次调用，把上一次的输出 URL 当下一次的 image。
-    quality：final = 参考图放大到 2K 规模处理（**约 6-7 分钟**，耐心等）；draft = 1024 规模（约 1.5 分钟），试提示词时用。
+    quality：final（默认）= 1024 规模、40 步，约 1.5 分钟；draft = 20 步，约 50 秒，试提示词用（细节略糙）。编辑不提供 2K。
     """
     caller = _caller_name(caller)
     if UPLOADED_NAME.match(image):
