@@ -3,8 +3,8 @@
 把 Unraid 上的 ComfyUI（Qwen-Image-2.1）包成 MCP 服务，streamable-http，路径 `/mcp`，端口 8189。
 所有调用方共用 ComfyUI 的单 GPU FIFO 队列；等待期间通过 MCP progress 汇报进度；队列超过 `MAX_PENDING` 直接拒绝。
 
-工具：`generate_image(prompt, aspect, quality, seed?)`、`edit_image(image, prompt, quality, seed?)`、`request_upload()`（本机图片上传：签发 10 分钟一次性签名 URL，客户端 `curl -F image=@file`）、`queue_status()`。
-默认 1K（final 1 分钟、编辑 1.5 分钟），文生图可显式 `quality="2k"`（4 分钟）。返回全分辨率 JPEG（Claude API 单图 5 MB 上限，2K PNG 传不过）+ PNG 原图签名 URL；不暴露服务器路径。调用方断开时只撤销排队中的任务，正在跑的让它跑完。
+工具：`generate_image(prompt, aspect, size=1k|2k, seed?)`、`edit_image(image, prompt, seed?)`、`request_upload()`（本机图片上传：签发 10 分钟一次性签名 URL，客户端 `curl -F image=@file`）、`queue_status()`。
+一律 40 步、默认 1K（文生图 1 分钟、编辑 1.5 分钟），文生图可显式 `size="2k"`（4 分钟）。返回全分辨率 JPEG（Claude API 单图 5 MB 上限，2K PNG 传不过）+ PNG 原图签名 URL；不暴露服务器路径。调用方断开时只撤销排队中的任务，正在跑的让它跑完。
 提示词写法和 draft/final 的选择规则都写在服务的 `instructions` 和工具描述里，客户端接上即得，不需要额外 skill 文档。
 
 ## 环境变量

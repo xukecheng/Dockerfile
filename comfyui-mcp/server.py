@@ -54,19 +54,18 @@ VAE = os.environ.get("VAE_NAME", "qwen_image_2.1_vae_bf16.safetensors")
 # 1K 为默认（4060 Ti 上 1 分钟内）；2k 是官方 README 的 2K 尺寸表，4 分钟一张，必须显式指定
 _1K = {"1:1": (1024, 1024), "4:3": (1216, 896), "3:4": (896, 1216), "3:2": (1280, 864), "2:3": (864, 1280), "16:9": (1376, 768), "9:16": (768, 1376)}
 _2K = {"1:1": (2048, 2048), "4:3": (2400, 1792), "3:4": (1792, 2400), "3:2": (2528, 1696), "2:3": (1696, 2528), "16:9": (2752, 1536), "9:16": (1536, 2752)}
-SIZES = {a: {"draft": _1K[a], "final": _1K[a], "2k": _2K[a]} for a in _1K}
-STEPS = {"draft": 20, "final": 40, "2k": 40}
-EDIT_STEPS = {"draft": 20, "final": 40}
-EDIT_REF_RES = {"draft": 1024, "final": 1024}   # 编辑一律 1024 规模：1536 要 4 分钟、2048 要 10 分钟，用户不接受
+SIZES = {"1k": _1K, "2k": _2K}
+STEPS = 40                    # 一律 40 步（官方 README），不分 draft/final
+EDIT_REF_RES = 1024           # 编辑一律 1024 规模：1536 要 4 分钟、2048 要 10 分钟，用户不接受
 # 实测（RTX 4060 Ti 16GB, int8）用于预估等待时间，单位秒
-EST_SECONDS = {("generate", "draft"): 30, ("generate", "final"): 60, ("generate", "2k"): 240, ("edit", "draft"): 50, ("edit", "final"): 90}
+EST_SECONDS = {("generate", "1k"): 60, ("generate", "2k"): 240, ("edit", "1k"): 90}
 
 INSTRUCTIONS = """本服务在家里 Unraid 的 RTX 4060 Ti 上跑 Qwen-Image-2.1（文生图 + 图片编辑，官方 int8 重打包权重），通过 ComfyUI 执行。
 
 何时用：用户要生成图片、海报、插画、示意图，或要修改一张已有图片（换物体、改风格、改文字、扩展画面）。
 
 必须知道的限制：
-- 单 GPU、单队列：一次只能出一张图，所有调用方共用同一条 FIFO 队列。耗时（不含排队）：文生图 final(1K) 约 1 分钟、draft 约 30 秒、2k 约 4 分钟；编辑 final 约 1.5 分钟、draft 约 50 秒。工具会阻塞到出图为止并持续汇报进度，**不要中途取消、不要重复提交**。若调用被取消，正在跑的任务仍会跑完，图可在 ComfyUI 队列面板找到。
+- 单 GPU、单队列：一次只能出一张图，所有调用方共用同一条 FIFO 队列。耗时（不含排队）：文生图 1K 约 1 分钟、2K 约 4 分钟；编辑约 1.5 分钟。工具会阻塞到出图为止并持续汇报进度，**不要中途取消、不要重复提交**。若调用被取消，正在跑的任务仍会跑完，图可在 ComfyUI 队列面板找到。
 - 队列里已有 >5 个任务时工具会直接拒绝并给出预估等待，此时告诉用户稍后再试，不要循环重试。
 
 提示词写法（实测结论）：
@@ -245,11 +244,11 @@ async def _upload(data: bytes) -> str:
     return r.json()["name"]
 
 
-async def _run(graph: dict, kind: str, quality: str, ctx: Context) -> dict:
+async def _run(graph: dict, kind: str, size: str, ctx: Context) -> dict:
     """提交并等待，期间用 progress 汇报；返回 history 里的 image 描述"""
     running, pending = await _queue_state()
     if pending >= MAX_PENDING:
-        est = (running + pending) * EST_SECONDS[(kind, quality)]
+        est = (running + pending) * EST_SECONDS[(kind, size)]
         raise ToolError(f"队列已有 {running} 个执行中 + {pending} 个排队，超过上限 {MAX_PENDING}。预计等待约 {est // 60} 分钟后再试。")
 
     client_id = uuid.uuid4().hex
@@ -288,7 +287,7 @@ async def _run(graph: dict, kind: str, quality: str, ctx: Context) -> dict:
                 if pos is None:
                     break
                 if pos > 0:
-                    await ctx.report_progress(0, total_steps, f"排队中，前面还有 {pos} 个任务（每个约 {EST_SECONDS[(kind, quality)] // 60} 分钟）· 已等 {time.time() - t0:.0f}s")
+                    await ctx.report_progress(0, total_steps, f"排队中，前面还有 {pos} 个任务（每个约 {EST_SECONDS[(kind, size)] // 60} 分钟）· 已等 {time.time() - t0:.0f}s")
     except asyncio.CancelledError:
         # 调用方放弃等待：只撤销还在排队的任务；正在跑的让它跑完落盘（几分钟的活杀掉太亏，图可从 ComfyUI 队列面板拿）
         async with _client() as c:
@@ -344,30 +343,27 @@ async def generate_image(
     prompt: str,
     ctx: Context,
     aspect: Literal["1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16"] = "1:1",
-    quality: Literal["final", "draft", "2k"] = "final",
+    size: Literal["1k", "2k"] = "1k",
     seed: int | None = None,
     caller: str = "unknown",
 ) -> list:
-    """用 Qwen-Image-2.1 文生图。阻塞直到出图（final 约 1 分钟，draft 约 30 秒，2k 约 4 分钟，另加排队时间），期间持续汇报进度；不要中途取消。
+    """用 Qwen-Image-2.1 文生图，40 步。阻塞直到出图（1k 约 1 分钟，2k 约 4 分钟，另加排队时间），期间持续汇报进度；不要中途取消。
 
-    quality 怎么选：
-    - final（默认）：1K（1024² 级）、40 步。用户要一张能用的图 → 用这个。
-    - draft：1K、20 步。用户说"先看看 / 快速试试 / 出几个方向"，或同一提示词要连续改多版 → 用这个。
-    - 2k：官方 2K 尺寸表（2048² 级）、40 步，约 4 分钟。**只在用户明确要求 2K / 大图 / 打印用途时才用**，否则不要选。
-      注意各档即使同 seed 构图也不同，draft 不能"精修"成 final。
+    size：1k（默认，1024² 级）；2k（官方 2K 尺寸表，2048² 级，约 4 分钟）**只在用户明确要求 2K / 大图 / 打印用途时才用**。
+    同 seed 下 1k 和 2k 构图不同，不能用 1k 预览再"放大成" 2k。
 
     aspect 按用途选：海报/手机壁纸 3:4 或 9:16，横幅/桌面 16:9，头像/图标 1:1。
     seed 不传则随机；想复现同一张图时传回上次返回的 seed。
     caller 填调用方标识（如 claude-code / hermes-xkc），只用于输出文件归档；开启鉴权时自动取 token 对应的名字，可不填。
     """
     caller = _caller_name(caller)
-    w, h = SIZES[aspect][quality]
+    w, h = SIZES[size][aspect]
     seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
-    graph = t2i_graph(prompt, w, h, STEPS[quality], seed, _prefix("gen", caller))
-    im = await _run(graph, "generate", quality, ctx)
+    graph = t2i_graph(prompt, w, h, STEPS, seed, _prefix("gen", caller))
+    im = await _run(graph, "generate", size, ctx)
     data, url = await _fetch_result(im)
     img, full = _full_jpeg(data)
-    return [img, f"已生成 {full[0]}x{full[1]}，{STEPS[quality]} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\nPNG 原图: {url}"]
+    return [img, f"已生成 {full[0]}x{full[1]}，{STEPS} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\nPNG 原图: {url}"]
 
 
 @mcp.tool()
@@ -375,16 +371,14 @@ async def edit_image(
     image: str,
     prompt: str,
     ctx: Context,
-    quality: Literal["final", "draft"] = "final",
     seed: int | None = None,
     caller: str = "unknown",
 ) -> list:
-    """用 Qwen-Image-2.1 编辑一张已有图片：换物体、改风格、改图中文字、扩展画面、做成海报等。输出画布跟随参考图的宽高比。
+    """用 Qwen-Image-2.1 编辑一张已有图片（40 步，约 1.5 分钟）：换物体、改风格、改图中文字、扩展画面、做成海报等。输出 1024 规模、宽高比跟随参考图。
 
     image 接受：① 本机文件 → 先调 request_upload() 拿到上传命令，执行后得到的文件名（mcp_xxx.png）；② http(s) URL（包括本服务之前返回的 PNG 原图 URL）；③ base64。
     绝不要用 ssh/scp 把文件搬到服务器，也不要传服务器路径。
     prompt 直接描述"要变成什么"，模型会保留参考图的构图和人物身份。一次一个明确改动最稳；要做多处修改就串联多次调用，把上一次的输出 URL 当下一次的 image。
-    quality：final（默认）= 1024 规模、40 步，约 1.5 分钟；draft = 20 步，约 50 秒，试提示词用（细节略糙）。编辑不提供 2K。
     """
     caller = _caller_name(caller)
     if UPLOADED_NAME.match(image):
@@ -392,11 +386,11 @@ async def edit_image(
     else:
         name = await _upload(await _load_image_bytes(image))
     seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
-    graph = edit_graph(prompt, name, EDIT_REF_RES[quality], EDIT_STEPS[quality], seed, _prefix("edit", caller))
-    im = await _run(graph, "edit", quality, ctx)
+    graph = edit_graph(prompt, name, EDIT_REF_RES, STEPS, seed, _prefix("edit", caller))
+    im = await _run(graph, "edit", "1k", ctx)
     out, url = await _fetch_result(im)
     img, full = _full_jpeg(out)
-    return [img, f"已编辑，输出 {full[0]}x{full[1]}，{EDIT_STEPS[quality]} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\nPNG 原图: {url}"]
+    return [img, f"已编辑，输出 {full[0]}x{full[1]}，{STEPS} 步，seed={seed}，耗时 {im['elapsed']:.0f}s。\nPNG 原图: {url}"]
 
 
 @mcp.tool()
@@ -414,8 +408,8 @@ async def request_upload() -> str:
 async def queue_status() -> str:
     """查看 ComfyUI 当前队列：正在执行几个、排队几个、大致要等多久。提交前不需要调用（generate/edit 会自己检查），只在用户问"现在忙不忙"时用。"""
     running, pending = await _queue_state()
-    est = (running + pending) * EST_SECONDS[("generate", "final")]
-    return f"执行中 {running} 个，排队 {pending} 个（上限 {MAX_PENDING}）。按每张 final 约 4 分钟估，新任务大约 {est // 60} 分钟后开始。"
+    est = (running + pending) * EST_SECONDS[("generate", "1k")]
+    return f"执行中 {running} 个，排队 {pending} 个（上限 {MAX_PENDING}）。按每张约 1 分钟估，新任务大约 {est // 60} 分钟后开始。"
 
 
 if __name__ == "__main__":
