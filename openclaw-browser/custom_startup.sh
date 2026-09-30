@@ -10,6 +10,19 @@ if [ -n "$VNC_USER" ] && [ "$VNC_USER" != "kasm_user" ] && [ -n "$VNC_PW" ]; the
 fi
 
 # ---------------------------------------------------------------------------
+# Chrome profile migration (Chrome 136+ refuses CDP on the default profile dir)
+# One-time copy keeps logins: both dirs use --password-store=basic, same key
+# ---------------------------------------------------------------------------
+CHROME_USER_DATA_DIR="${CHROME_USER_DATA_DIR:-$HOME/chrome-profile}"
+OLD_PROFILE_DIR="$HOME/.config/google-chrome"
+if [ ! -d "$CHROME_USER_DATA_DIR" ] && [ -d "$OLD_PROFILE_DIR" ]; then
+    cp -a "$OLD_PROFILE_DIR" "$CHROME_USER_DATA_DIR.tmp"
+    rm -f "$CHROME_USER_DATA_DIR.tmp"/Singleton*
+    mv "$CHROME_USER_DATA_DIR.tmp" "$CHROME_USER_DATA_DIR"
+    echo "[openclaw] Migrated Chrome profile $OLD_PROFILE_DIR -> $CHROME_USER_DATA_DIR"
+fi
+
+# ---------------------------------------------------------------------------
 # Caddy reverse proxy for CDP (bypass Chrome Host header check)
 # ---------------------------------------------------------------------------
 CDP_PORT="${CDP_PORT:-9222}"
@@ -17,19 +30,27 @@ CHROME_CDP_PORT="9223"
 
 MCP_PROXY_PORT="8765"
 
+# MCP_TOKEN set -> /mcp /sse /messages require "Authorization: Bearer <token>"
+# (/ping stays open for health checks). CDP itself has no auth mechanism.
+set +x
+MCP_AUTH=""
+if [ -n "$MCP_TOKEN" ]; then
+    MCP_AUTH="@unauthorized {
+      not path /ping
+      not header Authorization \"Bearer ${MCP_TOKEN}\"
+    }
+    respond @unauthorized 401"
+fi
+
 cat > /tmp/Caddyfile << EOF
 {
   auto_https off
   admin off
 }
 :${CDP_PORT} {
-  handle /mcp {
-    reverse_proxy 127.0.0.1:${MCP_PROXY_PORT}
-  }
-  handle /sse {
-    reverse_proxy 127.0.0.1:${MCP_PROXY_PORT}
-  }
-  handle /ping {
+  @mcp path /mcp /sse /messages /ping
+  handle @mcp {
+    ${MCP_AUTH}
     reverse_proxy 127.0.0.1:${MCP_PROXY_PORT}
   }
   handle {
@@ -37,6 +58,9 @@ cat > /tmp/Caddyfile << EOF
   }
 }
 EOF
+chmod 600 /tmp/Caddyfile
+echo "[openclaw] MCP auth: $([ -n "$MCP_TOKEN" ] && echo bearer || echo NONE)"
+set -x
 
 caddy run --config /tmp/Caddyfile &
 echo "[openclaw] Caddy started (:${CDP_PORT} -> CDP :${CHROME_CDP_PORT} + MCP :${MCP_PROXY_PORT})"
@@ -46,11 +70,15 @@ echo "[openclaw] Caddy started (:${CDP_PORT} -> CDP :${CHROME_CDP_PORT} + MCP :$
 # chrome-devtools-mcp uses lazy connection: connects to Chrome on first tool
 # call, auto-reconnects if Chrome restarts (--browserUrl mode)
 # ---------------------------------------------------------------------------
+# MCP_EXTRA_ARGS: extra chrome-devtools-mcp flags, e.g. --screenshotFormat=jpeg
+# (read -a splits on whitespace without glob-expanding URL patterns like *://10.*)
+read -ra MCP_EXTRA <<< "${MCP_EXTRA_ARGS:-}"
 mcp-proxy --port "${MCP_PROXY_PORT}" -- \
   chrome-devtools-mcp \
     --browserUrl "http://127.0.0.1:${CHROME_CDP_PORT}" \
     --no-usage-statistics \
-    --no-performance-crux &
+    --no-performance-crux \
+    "${MCP_EXTRA[@]}" &
 echo "[openclaw] MCP server started (chrome-devtools-mcp via mcp-proxy :${MCP_PROXY_PORT})"
 
 # ---------------------------------------------------------------------------

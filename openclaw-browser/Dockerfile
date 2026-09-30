@@ -1,4 +1,4 @@
-ARG BASE_TAG="1.16.1"
+ARG BASE_TAG="1.19.0-rolling-weekly"
 ARG BASE_IMAGE="chrome"
 FROM kasmweb/${BASE_IMAGE}:${BASE_TAG}
 
@@ -10,8 +10,9 @@ USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Remove expired Google Chrome apt source from base image
-RUN rm -f /etc/apt/sources.list.d/google-chrome.list 2>/dev/null
+# Remove Google Chrome apt source from base image (its signing key expires and
+# breaks apt-get update; 1.16 shipped .list, 1.19 ships deb822 .sources)
+RUN rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
 
 # Add Caddy official apt repo + install packages
 RUN apt-get update \
@@ -33,10 +34,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 
 # Install MCP tools (chrome-devtools-mcp: 13MB zero deps, mcp-proxy: stdio→HTTP bridge)
 # Patch: inject icons into serverInfo (SDK already supports 2025-11-25 protocol)
+# The grep fails the build if an upgrade moves the serverInfo literal again
 ARG MCP_ICON_URL="https://raw.githubusercontent.com/xukecheng/Dockerfile/main/openclaw-browser/icon.png"
-RUN npm install -g chrome-devtools-mcp@0.19.0 mcp-proxy@6 \
+RUN npm install -g chrome-devtools-mcp@1.10.1 mcp-proxy@6.7.19 \
   && sed -i "s|version: VERSION,|version: VERSION, icons: [{ src: '${MCP_ICON_URL}', mimeType: 'image/png', sizes: ['1024x1024'] }],|" \
-    /usr/lib/node_modules/chrome-devtools-mcp/build/src/server.js
+    /usr/lib/node_modules/chrome-devtools-mcp/build/src/index.js \
+  && grep -q "icons: \[{ src: '${MCP_ICON_URL}'" /usr/lib/node_modules/chrome-devtools-mcp/build/src/index.js
 
 # Generate zh_CN.UTF-8 locale
 RUN sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
@@ -47,7 +50,11 @@ ENV LANG=zh_CN.UTF-8 \
     TZ=Asia/Shanghai
 
 # Chrome args: CDP + anti-detection (injected via APP_ARGS -> custom_startup.sh)
-ENV APP_ARGS="--start-maximized --remote-debugging-address=0.0.0.0 --remote-debugging-port=9223 --remote-allow-origins=* --disable-blink-features=AutomationControlled"
+# Chrome 136+ ignores --remote-debugging-port on the default profile dir (even when
+# passed explicitly), so the profile lives in a non-default dir; custom_startup.sh
+# migrates the old ~/.config/google-chrome into it on first start
+ENV CHROME_USER_DATA_DIR=/home/kasm-user/chrome-profile
+ENV APP_ARGS="--start-maximized --user-data-dir=${CHROME_USER_DATA_DIR} --remote-debugging-port=9223 --remote-allow-origins=* --disable-blink-features=AutomationControlled"
 ENV CDP_PORT=9222
 ENV VNC_USER=openclaw
 
