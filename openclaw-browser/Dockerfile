@@ -54,13 +54,16 @@ ENV LANG=zh_CN.UTF-8 \
 # passed explicitly), so the profile lives in a non-default dir; custom_startup.sh
 # migrates the old ~/.config/google-chrome into it on first start
 ENV CHROME_USER_DATA_DIR=/home/kasm-user/chrome-profile
-ENV APP_ARGS="--start-maximized --user-data-dir=${CHROME_USER_DATA_DIR} --remote-debugging-port=9223 --remote-allow-origins=* --disable-blink-features=AutomationControlled"
+ENV APP_ARGS="--start-maximized --user-data-dir=${CHROME_USER_DATA_DIR} --remote-debugging-port=9223 --remote-allow-origins=* --disable-blink-features=AutomationControlled --use-angle=gl"
 ENV CDP_PORT=9222
 ENV VNC_USER=openclaw
 
 # GPU: DRI3 direct rendering (bypasses VirtualGL, Chrome ANGLE/EGL talks to GPU directly)
 # HW3D=true enables DRI3 in KasmVNC's Xvnc server
 # DRINODE points to the GPU render device node
+# --use-angle=gl (in APP_ARGS): Chrome 153's default ANGLE backend fails
+# eglCreateWindowSurface (EGL_BAD_MATCH) on KasmVNC DRI3 and silently falls back
+# to software compositing; the ANGLE GL backend keeps gpu_compositing enabled
 # Note: Do NOT set KASM_EGL_CARD/KASM_RENDERD — those trigger VirtualGL which is
 # incompatible with Chrome 131+ ANGLE/EGL rendering pipeline
 ENV HW3D=true

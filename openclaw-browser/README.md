@@ -145,7 +145,7 @@ Chrome 136+ 在默认配置目录（`~/.config/google-chrome`）上会忽略 `--
 
 Chrome 131+ 仅支持 ANGLE/EGL 渲染，不再支持 GLX。kasmweb 内置的 VirtualGL 拦截的是 GLX 调用，与 Chrome ANGLE/EGL 不兼容（VirtualGL 维护者已确认）。
 
-解决方案：使用 KasmVNC DRI3 模式（`HW3D=true` + `DRINODE`），让 Chrome 通过 DRI3 协议直接访问 GPU，完全绕过 VirtualGL。注意不能设置 `KASM_EGL_CARD`/`KASM_RENDERD`，否则会触发 VirtualGL 反而干扰渲染。
+解决方案：使用 KasmVNC DRI3 模式（`HW3D=true` + `DRINODE`），让 Chrome 通过 DRI3 协议直接访问 GPU，完全绕过 VirtualGL。Chrome 153 起默认 ANGLE 后端在 DRI3 下创建窗口 surface 失败（日志 `EGL_BAD_MATCH`），会静默退回软件合成，因此 `APP_ARGS` 带 `--use-angle=gl`；自定义 `APP_ARGS` 时别漏掉。注意不能设置 `KASM_EGL_CARD`/`KASM_RENDERD`，否则会触发 VirtualGL 反而干扰渲染。
 
 ### MCP Server
 
