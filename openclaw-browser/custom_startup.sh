@@ -22,6 +22,16 @@ if [ ! -d "$CHROME_USER_DATA_DIR" ] && [ -d "$OLD_PROFILE_DIR" ]; then
     echo "[openclaw] Migrated Chrome profile $OLD_PROFILE_DIR -> $CHROME_USER_DATA_DIR"
 fi
 
+# kasm's /usr/bin/google-chrome only does this for ~/.config/google-chrome.
+# The lock records the old container's hostname, so after a recreate Chrome
+# blocks on an "another computer is using this profile" dialog without it.
+rm -f "$CHROME_USER_DATA_DIR"/Singleton*
+if [ -f "$CHROME_USER_DATA_DIR/Default/Preferences" ]; then
+    sed -i -e 's/"exited_cleanly":false/"exited_cleanly":true/' \
+           -e 's/"exit_type":"Crashed"/"exit_type":"None"/' \
+        "$CHROME_USER_DATA_DIR/Default/Preferences"
+fi
+
 # ---------------------------------------------------------------------------
 # Caddy reverse proxy for CDP (bypass Chrome Host header check)
 # ---------------------------------------------------------------------------
