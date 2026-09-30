@@ -41,13 +41,16 @@ CHROME_CDP_PORT="9223"
 MCP_PROXY_PORT="8765"
 
 # MCP_TOKEN set -> /mcp /sse /messages require "Authorization: Bearer <token>"
-# (/ping stays open for health checks). CDP itself has no auth mechanism.
+# or "X-API-Key: <token>" (claude.ai custom connectors reserve Authorization
+# for OAuth, so their static header has to be X-API-Key).
+# /ping stays open for health checks. CDP itself has no auth mechanism.
 set +x
 MCP_AUTH=""
 if [ -n "$MCP_TOKEN" ]; then
     MCP_AUTH="@unauthorized {
       not path /ping
       not header Authorization \"Bearer ${MCP_TOKEN}\"
+      not header X-API-Key \"${MCP_TOKEN}\"
     }
     respond @unauthorized 401"
 fi

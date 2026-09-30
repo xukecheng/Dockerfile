@@ -48,7 +48,7 @@ curl http://localhost:9222/ping
 | `APP_ARGS` | (见 Dockerfile) | Chrome 额外启动参数 |
 | `LAUNCH_URL` | 空 | Chrome 启动时打开的 URL |
 | `CHROME_USER_DATA_DIR` | `/home/kasm-user/chrome-profile` | Chrome 配置目录（必须是非默认目录，见下） |
-| `MCP_TOKEN` | 空 | 设置后 `/mcp` `/sse` `/messages` 需带 `Authorization: Bearer <token>`，否则 401；`/ping` 不校验。只用字母数字 |
+| `MCP_TOKEN` | 空 | 设置后 `/mcp` `/sse` `/messages` 需带 `Authorization: Bearer <token>` 或 `X-API-Key: <token>`（claude.ai 自定义连接器用后者），否则 401；`/ping` 不校验。只用字母数字 |
 | `MCP_EXTRA_ARGS` | 空 | 追加给 chrome-devtools-mcp 的参数，空格分隔，如 `--screenshotFormat=jpeg --no-page-id-routing` |
 | `HW3D` | `true` | 启用 KasmVNC DRI3 直接渲染 |
 | `DRINODE` | `/dev/dri/renderD128` | DRI3 使用的 GPU render 设备节点 |
